@@ -66,8 +66,10 @@ export default function Home() {
     }
   ];
 
-  const formatPrice = (n) =>
-    n ? new Intl.NumberFormat("fr-LU", { style: "currency", currency: "EUR" }).format(n) : "Prix sur demande";
+    const formatPrice = (n: number | null | undefined) =>
+  n != null
+    ? new Intl.NumberFormat("fr-LU", { style: "currency", currency: "EUR" }).format(n)
+    : "Prix sur demande";
 
   return (
     <div className="flex min-h-screen font-sans bg-black text-white">
