@@ -12,7 +12,7 @@ const COMPLEX_COMPONENTS = [
   {
     title: "Zones d’entraînement",
     desc: "Espaces modulables pour perfectionnement, tests et sécurité.",
-    img: "/slide-4.jpg",
+    img: "/slide-15.png",
   },
   {
     title: "Paddock & bâtiments",
@@ -290,6 +290,7 @@ export default function InfrastructurePage() {
     </main>
   );
 }
+
 
 
 
