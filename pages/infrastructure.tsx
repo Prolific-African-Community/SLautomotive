@@ -7,7 +7,7 @@ const COMPLEX_COMPONENTS = [
   {
     title: "Piste de karting",
     desc: "Infrastructure de base dédiée à l’initiation et à la formation technique.",
-    img: "/slide-4.jpg",
+    img: "/infra-kart.webp",
   },
   {
     title: "Zones d’entraînement",
@@ -17,12 +17,12 @@ const COMPLEX_COMPONENTS = [
   {
     title: "Paddock & bâtiments",
     desc: "Zones techniques, accueil, briefing et maintenance.",
-    img: "/slide-4.jpg",
+    img: "/paddock.webp",
   },
   {
     title: "Espaces spectateurs",
     desc: "Zones sécurisées pour événements et compétitions.",
-    img: "/slide-4.jpg",
+    img: "/spectateur.webp",
   },
 ];
 
@@ -290,3 +290,4 @@ export default function InfrastructurePage() {
     </main>
   );
 }
+
