@@ -191,12 +191,12 @@ export default function FormationsPage() {
 
   return (
     <main className="bg-slate-50 text-slate-900 font-sans leading-relaxed">
-       {/* HEADER */}
+        {/* HEADER */}
 <header
   className={cn(
     "fixed top-0 w-full z-50 transition-all",
     scrolled
-      ? "bg-black/80 backdrop-blur border-b border-white/10"
+      ? "bg-white/90 backdrop-blur border-b border-white/80"
       : "bg-transparent"
   )}
 >
@@ -233,7 +233,7 @@ export default function FormationsPage() {
     <button
       type="button"
       onClick={() => setMenuOpen((v) => !v)}
-      className="lg:hidden inline-flex items-center justify-center rounded-md p-2 text-slate-200 hover:bg-white/10 transition"
+      className="lg:hidden inline-flex items-center justify-center rounded-md p-2 text-slate-200 hover:bg-white/80 transition"
       aria-label="Ouvrir le menu"
     >
       <svg
@@ -254,7 +254,7 @@ export default function FormationsPage() {
 
   {/* MOBILE MENU */}
   {menuOpen && (
-    <div className="lg:hidden bg-black/95 backdrop-blur border-t border-white/10">
+    <div className="lg:hidden bg-white backdrop-blur border-t border-white">
       <div className="px-6 py-6 flex flex-col gap-5 text-sm font-semibold uppercase tracking-wide">
         {[
           { label: "L'Académie", href: "/academy" },
@@ -613,6 +613,7 @@ export default function FormationsPage() {
     </main>
   );
 }
+
 
 
 
