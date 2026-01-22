@@ -18,6 +18,7 @@ const SECTION_Y = "py-24";
 const HERO_SLIDES = [
   { src: "/slide-2.jpg", alt: "Stanley Racing Academy circuit Senegal" },
   { src: "/slide-8.webp", alt: "Motorsport training Africa" },
+  { src: "/slide-11.webp", alt: "Motorsport training Africa" },
   { src: "/slide-7.jpg", alt: "Racing academy karting" },
   { src: "/slide-5.jpg", alt: "Motorsport training Africa" },
   { src: "/slide-6.jpg", alt: "Motorsport training Africa" },
@@ -381,5 +382,6 @@ export default function StanleyRacingAcademyHome() {
     </main>
   );
 }
+
 
 
