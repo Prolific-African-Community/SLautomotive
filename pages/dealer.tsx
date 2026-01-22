@@ -1,4 +1,11 @@
-import React, { useMemo, useState } from "react";
+"use client";
+
+import React, { useEffect, useMemo, useState } from "react";
+
+/* ------------------ Utils ------------------ */
+type ClassValue = string | false | null | undefined;
+const cn = (...c: ClassValue[]) => c.filter(Boolean).join(" ");
+
 
 type Vehicle = {
   stockId: string;
@@ -22,6 +29,15 @@ type Vehicle = {
 };
 
 export default function Dealer() {
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 20);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   const vehicles: Vehicle[] = useMemo(
     () => [
       {
@@ -40,7 +56,12 @@ export default function Dealer() {
         provenance: "DE",
         entretien: "Concession Audi",
         vinMasked: "WAUZZZ…1234",
-        options: ["Matrix LED", "Virtual Cockpit", "Sièges sport chauffants", "Toit pano"],
+        options: [
+          "Matrix LED",
+          "Virtual Cockpit",
+          "Sièges sport chauffants",
+          "Toit pano",
+        ],
         description:
           "Fin de leasing 🇩🇪, historique constructeur complet, contrôle 150 points. Dossier transparent et prêt à être transmis.",
       },
@@ -60,7 +81,12 @@ export default function Dealer() {
         provenance: "LU",
         entretien: "BMW Luxembourg",
         vinMasked: "WBA…5678",
-        options: ["Driving Assistant", "Live Cockpit Pro", "Shadowline", "Harman/Kardon"],
+        options: [
+          "Driving Assistant",
+          "Live Cockpit Pro",
+          "Shadowline",
+          "Harman/Kardon",
+        ],
         description:
           "Première main, suivi constructeur, fin de leasing. Rapport d’état détaillé disponible sur demande.",
       },
@@ -80,7 +106,12 @@ export default function Dealer() {
         provenance: "DE",
         entretien: "Mercedes-Benz",
         vinMasked: "WDD…9012",
-        options: ["LED High Performance", "COMAND", "Pack Stationnement", "Keyless-Go"],
+        options: [
+          "LED High Performance",
+          "COMAND",
+          "Pack Stationnement",
+          "Keyless-Go",
+        ],
         description:
           "Réservée. Dossier complet, CT à jour, transparence totale. Contacte-nous pour la prochaine dispo.",
       },
@@ -92,55 +123,55 @@ export default function Dealer() {
 
   const formatPrice = (n: number | null) =>
     n != null
-      ? new Intl.NumberFormat("fr-LU", { style: "currency", currency: "EUR" }).format(n)
+      ? new Intl.NumberFormat("fr-LU", {
+          style: "currency",
+          currency: "EUR",
+        }).format(n)
       : "Prix sur demande";
 
   return (
-    <div className="flex min-h-screen font-sans bg-black text-white">
-      {/* Sidebar */}
-      <aside className="w-64 bg-black text-white flex flex-col px-4 space-y-6 shadow-xl">
-        <a href="/home">
-          <img
-            src="/logo-sl-automotive.jpg"
-            alt="SL Automotive"
-            className="h-56 w-56 flex mx-0"
-          />
-        </a>
-
-        <nav className="space-y-4 text-sm mx-8">
-          {[
-            { icon: "/home.svg", label: "Accueil", href: "/home" },
-            { icon: "/star.svg", label: "Nos véhicules", href: "/dealer" },
-            { icon: "/orders.svg", label: "Processus", href: "/process" },
-            { icon: "/chat.svg", label: "Contact", href: "/contact" },
-          ].map(({ icon, label, href }) => (
-            <a
-              key={label}
-              href={href}
-              className="flex items-center gap-3 px-4 py-2 rounded-lg no-underline transition text-white hover:bg-yellow-400 hover:text-black"
-            >
-              <img src={icon} alt="" className="w-5 h-5" />
-              {label}
-            </a>
-          ))}
-        </nav>
-      </aside>
-
-      {/* Main */}
-      <main className="flex-1 overflow-y-auto pr-48 py-16 relative">
-        {/* CTA rapide (WhatsApp) */}
-        <div className="absolute top-6 right-6 z-50">
-          <a
-            className="w-40 h-12 flex items-center justify-center bg-yellow-400 no-underline text-black font-semibold hover:bg-white hover:border-white hover:border-2 transition rounded"
-            href="https://wa.me/35200000000?text=Bonjour%20SL%20Automotive%2C%20je%20souhaite%20des%20infos."
-            target="_blank"
-            rel="noreferrer"
-          >
-            WhatsApp
+    <main className="bg-black text-white min-h-screen">
+       {/* HEADER */}
+       <header
+        className={cn(
+          "fixed top-0 w-full z-50 transition-all",
+          scrolled
+            ? "bg-black/80 backdrop-blur border-b border-slate-200"
+            : "bg-transparent"
+        )}
+      >
+        <nav className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+          <a href="/" className="flex items-center gap-3">
+            <img
+              src="/logo-sl-automotive.jpg"
+              alt="SL Automotive logo"
+              className="h-36 w-auto"
+            />
+            {/* Wordmark volontairement supprimé pour garder uniquement le logo */}
           </a>
-        </div>
 
-        {/* HERO */}
+          <div className="hidden lg:flex gap-8 text-sm font-semibold uppercase tracking-wide">
+            <a href="/academy" className="text-slate-400 no-underline hover:text-orange-600">L'Académie</a>
+            <a href="/formations" className="text-slate-400 no-underline hover:text-orange-600">Formations</a>
+            <a href="/investor" className="text-slate-400 no-underline hover:text-orange-600">Investisseurs</a>
+            <a href="/infrastructure" className="text-slate-400 no-underline hover:text-orange-600">Infrastructure</a>
+            <a href="/dealer" className="text-slate-400 no-underline hover:text-orange-600">Dealer</a>
+            <a href="/garage" className="text-slate-400 no-underline hover:text-orange-600">Garage</a>
+          </div>
+
+          <a
+            href="#contact"
+            className="no-underline bg-yellow-400 text-black px-6 py-3 rounded-full text-sm font-semibold hover:bg-orange-600 transition"
+          >
+            Contact
+          </a>
+        </nav>
+      </header>
+
+      <div className="pt-24 font-sans">
+{/* Main */}
+      <div className="max-w-7xl mx-auto pt-24 px-6 py-16 relative">
+                {/* HERO */}
         <section className="relative text-center px-6">
           <h1 className="text-4xl md:text-6xl font-extrabold leading-tight text-white mt-4 mb-2">
             Occasions d’exception. Zéro surprise.
@@ -178,14 +209,16 @@ export default function Dealer() {
 
         {/* Sélection du moment */}
         <section className="mb-20">
-          <h2 className="text-3xl font-bold text-center mb-12 pt-24">Sélection du moment</h2>
+          <h2 className="text-3xl font-bold text-center mb-12 pt-24">
+            Sélection du moment
+          </h2>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10 max-w-7xl mx-auto">
             {vehicles.map((v) => (
               <button
                 key={v.stockId}
                 type="button"
-                className="text-left bg-[#111113] rounded-2xl shadow-md overflow-hidden hover:shadow-lg hover:scale-[1.02] transition cursor-pointer border border-white/5"
+                className="text-white text-left bg-[#111113] rounded-2xl shadow-md overflow-hidden hover:shadow-lg hover:scale-[1.02] transition cursor-pointer border border-white/5"
                 onClick={() => setSelectedCar(v)}
                 title="Voir le détail"
               >
@@ -195,7 +228,7 @@ export default function Dealer() {
                     alt={`${v.marque} ${v.modele}`}
                     className="w-full h-48 object-cover"
                   />
-                  <div className="absolute bottom-2 right-2 text-xs bg-black/70 px-2 py-1 rounded">
+                  <div className="absolute text-black bottom-2 right-2 text-xs bg-white/70 px-2 py-1 rounded">
                     {v.annee} • {v.km.toLocaleString("fr-LU")} km
                   </div>
                 </div>
@@ -206,7 +239,9 @@ export default function Dealer() {
                       {v.marque} {v.modele}
                       {v.finition ? ` ${v.finition}` : ""}
                     </h3>
-                    <span className="text-sm text-gray-300">{formatPrice(v.price)}</span>
+                    <span className="text-sm text-gray-300">
+                      {formatPrice(v.price)}
+                    </span>
                   </div>
 
                   <p className="text-sm text-gray-400 mt-1">
@@ -220,7 +255,9 @@ export default function Dealer() {
 
         {/* Valeur / Process clés */}
         <section className="mb-24">
-          <h2 className="text-3xl font-bold text-center mb-12">Pourquoi SL Automotive ?</h2>
+          <h2 className="text-3xl font-bold text-center mb-12">
+            Pourquoi SL Automotive ?
+          </h2>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 max-w-5xl mx-auto">
             {[
@@ -240,7 +277,10 @@ export default function Dealer() {
                   "Import depuis l’Allemagne ou le Luxembourg jusqu’à Dakar, test drive sur place et garantie optionnelle 1 à 2 ans.",
               },
             ].map(({ label, text }) => (
-              <div key={label} className="bg-[#111113] rounded-xl shadow p-6 border border-white/5">
+              <div
+                key={label}
+                className="bg-[#111113] rounded-xl shadow p-6 border border-white/5"
+              >
                 <h3 className="text-lg font-semibold mb-2">{label}</h3>
                 <p className="text-sm text-gray-300">{text}</p>
               </div>
@@ -298,7 +338,9 @@ export default function Dealer() {
             © {new Date().getFullYear()} SL Automotive — Mentions légales — Politique
             de confidentialité
           </p>
-          <p className="text-[13px]">La performance, sans compromis. La transparence, sans surprise.</p>
+          <p className="text-[13px]">
+            La performance, sans compromis. La transparence, sans surprise.
+          </p>
         </footer>
 
         {/* MODAL DÉTAIL VÉHICULE */}
@@ -356,7 +398,9 @@ export default function Dealer() {
 
                 {/* Specs */}
                 <div className="flex flex-col gap-3">
-                  <p className="text-xs uppercase tracking-widest text-zinc-400 mb-2">Détails</p>
+                  <p className="text-xs uppercase tracking-widest text-zinc-400 mb-2">
+                    Détails
+                  </p>
 
                   {[
                     { label: "Boîte", value: selectedCar.boite },
@@ -380,7 +424,9 @@ export default function Dealer() {
                   {/* Options */}
                   {selectedCar.options.length > 0 && (
                     <div className="mt-2">
-                      <p className="text-xs uppercase tracking-widest text-zinc-400 mb-2">Options</p>
+                      <p className="text-xs uppercase tracking-widest text-zinc-400 mb-2">
+                        Options
+                      </p>
                       <div className="flex flex-wrap gap-2">
                         {selectedCar.options.map((o, i) => (
                           <span
@@ -436,7 +482,9 @@ export default function Dealer() {
             </div>
           </div>
         )}
-      </main>
-    </div>
+      </div>
+      </div>
+    </main>
   );
 }
+
