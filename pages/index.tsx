@@ -22,6 +22,7 @@ const HERO_SLIDES = [
   { src: "/slide-7.jpg", alt: "Racing academy karting" },
   { src: "/slide-5.jpg", alt: "Motorsport training Africa" },
   { src: "/slide-6.jpg", alt: "Motorsport training Africa" },
+  { src: "/slide-14.jpg", alt: "Motorsport training Africa" },
 ];
 
 const FORMATIONS = [
@@ -382,6 +383,7 @@ export default function StanleyRacingAcademyHome() {
     </main>
   );
 }
+
 
 
 
