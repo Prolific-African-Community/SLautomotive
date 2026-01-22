@@ -245,43 +245,16 @@ export default function StanleyRacingAcademyHome() {
             </p>
           </div>
           <div className="flex justify-center md:justify-end">
-            {/* Placeholder photo (remplacer src plus tard) */}
+            {/* Photo fondateur */}
             <div className="w-full max-w-sm">
-              <div className="relative overflow-hidden rounded-full bg-slate-100 ring-1 ring-slate-200 shadow-sm">
-                <div className="aspect-[5/5] w-full grid place-items-center">
-                  <div className="text-center px-8">
-                    <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-white ring-1 ring-slate-200 grid place-items-center">
-                      <svg
-                        width="22"
-                        height="22"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        className="text-slate-400"
-                      >
-                        <path
-                          d="M20 21a8 8 0 0 0-16 0"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                        />
-                        <circle
-                          cx="12"
-                          cy="8"
-                          r="4"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                        />
-                      </svg>
-                    </div>
-                    <p className="text-sm font-semibold text-slate-700">
-                      Photo de profil du fondateur
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      Placeholder — ajoutez une image ici plus tard
-                    </p>
-                  </div>
-                </div>
-                {/* Effet doux */}
+              <div className="relative overflow-hidden rounded-3xl bg-slate-100 ring-1 ring-slate-200 shadow-sm">
+                <img
+                  src="/slide-9.jpg"
+                  alt="Stanley Lishou — Fondateur"
+                  className="w-full aspect-[4/5] object-cover"
+                  loading="lazy"
+                  draggable={false}
+                />
                 <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/0 via-white/0 to-slate-200/40" />
               </div>
             </div>
