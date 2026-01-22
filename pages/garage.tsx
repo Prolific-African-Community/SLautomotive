@@ -40,12 +40,12 @@ export default function GaragePage() {
   return (
     
     <main className="bg-slate-50 text-slate-900 font-sans leading-relaxed">
-      {/* HEADER */}
-      <header
+       {/* HEADER */}
+<header
   className={cn(
     "fixed top-0 w-full z-50 transition-all",
     scrolled
-      ? "bg-white/80 backdrop-blur border-b border-white/10"
+      ? "bg-white/90 backdrop-blur border-b border-white/80"
       : "bg-transparent"
   )}
 >
@@ -54,7 +54,7 @@ export default function GaragePage() {
     {/* Logo */}
     <a href="/" className="flex items-center">
       <img
-        src="/logo-sl-automotive.jpg"
+        src="/logo-sl-automotive.png"
         alt="SL Automotive logo"
         className="h-28 w-auto"
       />
@@ -73,7 +73,7 @@ export default function GaragePage() {
     {/* Desktop CTA */}
     <a
       href="#contact"
-      className="hidden lg:inline-flex no-underline bg-orange-600 text-black px-6 py-3 rounded-full text-sm font-semibold hover:bg-orange-700 transition"
+      className="hidden lg:inline-flex no-underline bg-orange-600 text-white px-6 py-3 rounded-full text-sm font-semibold hover:bg-orange-700 transition"
     >
       Contact
     </a>
@@ -103,7 +103,7 @@ export default function GaragePage() {
 
   {/* MOBILE MENU */}
   {menuOpen && (
-    <div className="lg:hidden bg-white/95 backdrop-blur border-t border-white/10">
+    <div className="lg:hidden bg-white backdrop-blur border-t border-white">
       <div className="px-6 py-6 flex flex-col gap-5 text-sm font-semibold uppercase tracking-wide">
         {[
           { label: "L'Académie", href: "/academy" },
@@ -126,7 +126,7 @@ export default function GaragePage() {
         <a
           href="#contact"
           onClick={() => setMenuOpen(false)}
-          className="mt-4 inline-flex justify-center rounded-full bg-orange-600 px-6 py-3 text-black font-semibold hover:bg-orange-700 transition no-underline"
+          className="mt-4 inline-flex justify-center rounded-full bg-orange-600 px-6 py-3 text-white font-semibold hover:bg-orange-700 transition no-underline"
         >
           Contact
         </a>
@@ -134,7 +134,7 @@ export default function GaragePage() {
     </div>
   )}
 </header>
-
+      
       {/* HERO */}
       <section className="min-h-[70vh] flex items-center pt-32 px-6 bg-slate-100">
         <div className="max-w-5xl mx-auto text-center">
@@ -365,4 +365,5 @@ export default function GaragePage() {
     </main>
   );
 }
+
 
