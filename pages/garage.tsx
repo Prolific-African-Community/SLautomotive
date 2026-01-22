@@ -21,6 +21,7 @@ export default function GaragePage() {
   const [step, setStep] = useState(1);
   const [intervention, setIntervention] = useState<string | null>(null);
   const [client, setClient] = useState({ firstName: "", lastName: "", email: "", phone: "" });
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const goToAssistant = () => {
     setStep(1);
@@ -30,34 +31,101 @@ export default function GaragePage() {
 
   return (
     <main className="bg-slate-50 text-slate-900 font-sans leading-relaxed">
-      {/* HEADER */}
-      <header className="fixed top-0 w-full z-50 bg-white/90 backdrop-blur border-b border-slate-200">
-        <nav className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-          <a href="/" className="flex items-center gap-3 no-underline">
-            <img
-              src="/logo-sl-automotive.png"
-              alt="SL Automotive"
-              className="h-20 w-auto"
-            />
-          </a>
+       {/* HEADER */}
+<header
+  className={cn(
+    "fixed top-0 w-full z-50 transition-all",
+    scrolled
+      ? "bg-black/80 backdrop-blur border-b border-white/10"
+      : "bg-transparent"
+  )}
+>
+  {/* NAV BAR */}
+  <nav className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+    {/* Logo */}
+    <a href="/" className="flex items-center">
+      <img
+        src="/logo-sl-automotive.png"
+        alt="SL Automotive logo"
+        className="h-28 w-auto"
+      />
+    </a>
 
-          <div className="hidden lg:flex gap-8 text-sm font-semibold uppercase tracking-wide">
-            <a href="/academy" className="text-black no-underline hover:text-orange-600">L'Académie</a>
-            <a href="/formations" className="text-black no-underline hover:text-orange-600">Formations</a>
-            <a href="/investor" className="text-black no-underline hover:text-orange-600">Investisseurs</a>
-            <a href="/infrastructure" className="text-black no-underline hover:text-orange-600">Infrastructure</a>
-            <a href="/dealer" className="text-black no-underline hover:text-orange-600">Dealer</a>
-            <a href="/garage" className="text-black no-underline hover:text-orange-600">Garage</a>
-          </div>
+    {/* Desktop menu */}
+    <div className="hidden lg:flex gap-8 text-sm font-semibold uppercase tracking-wide">
+      <a href="/academy" className="text-black no-underline hover:text-orange-600">L'Académie</a>
+      <a href="/formations" className="text-black no-underline hover:text-orange-600">Formations</a>
+      <a href="/investor" className="text-black no-underline hover:text-orange-600">Investisseurs</a>
+      <a href="/infrastructure" className="text-black no-underline hover:text-orange-600">Infrastructure</a>
+      <a href="/dealer" className="text-black no-underline hover:text-orange-600">Dealer</a>
+      <a href="/garage" className="text-black no-underline hover:text-orange-600">Garage</a>
+    </div>
 
+    {/* Desktop CTA */}
+    <a
+      href="#contact"
+      className="hidden lg:inline-flex no-underline bg-orange-600 text-white px-6 py-3 rounded-full text-sm font-semibold hover:bg-orange-700 transition"
+    >
+      Contact
+    </a>
+
+    {/* Mobile burger */}
+    <button
+      type="button"
+      onClick={() => setMenuOpen((v) => !v)}
+      className="lg:hidden inline-flex items-center justify-center rounded-md p-2 text-slate-200 hover:bg-white/10 transition"
+      aria-label="Ouvrir le menu"
+    >
+      <svg
+        className="h-6 w-6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        viewBox="0 0 24 24"
+      >
+        {menuOpen ? (
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        ) : (
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+        )}
+      </svg>
+    </button>
+  </nav>
+
+  {/* MOBILE MENU */}
+  {menuOpen && (
+    <div className="lg:hidden bg-black/95 backdrop-blur border-t border-white/10">
+      <div className="px-6 py-6 flex flex-col gap-5 text-sm font-semibold uppercase tracking-wide">
+        {[
+          { label: "L'Académie", href: "/academy" },
+          { label: "Formations", href: "/formations" },
+          { label: "Investisseurs", href: "/investor" },
+          { label: "Infrastructure", href: "/infrastructure" },
+          { label: "Dealer", href: "/dealer" },
+          { label: "Garage", href: "/garage" },
+        ].map(({ label, href }) => (
           <a
-            href="/reserver"
-            className="bg-orange-600 text-white px-6 py-3 rounded-full text-sm font-semibold hover:bg-orange-700 transition no-underline"
+            key={label}
+            href={href}
+            onClick={() => setMenuOpen(false)}
+            className="text-black no-underline hover:text-orange-500 transition"
           >
-            Réserver
+            {label}
           </a>
-        </nav>
-      </header>
+        ))}
+
+        <a
+          href="#contact"
+          onClick={() => setMenuOpen(false)}
+          className="mt-4 inline-flex justify-center rounded-full bg-orange-600 px-6 py-3 text-white font-semibold hover:bg-orange-700 transition no-underline"
+        >
+          Contact
+        </a>
+      </div>
+    </div>
+  )}
+</header>
+
       {/* HERO */}
       <section className="min-h-[70vh] flex items-center pt-32 px-6 bg-slate-100">
         <div className="max-w-5xl mx-auto text-center">
@@ -288,3 +356,4 @@ export default function GaragePage() {
     </main>
   );
 }
+
