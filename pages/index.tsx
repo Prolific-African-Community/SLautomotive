@@ -281,7 +281,7 @@ export default function StanleyRacingAcademyHome() {
           <div className="mt-12 flex justify-center">
             <div className="relative w-full max-w-lg rounded-2xl overflow-hidden shadow-lg">
               <img
-                src="/slide-15.webp"
+                src="/slide-15.png"
                 alt="Circuit et infrastructures – Lac Rose"
                 className="w-full h-full object-cover"
               />
@@ -383,6 +383,7 @@ export default function StanleyRacingAcademyHome() {
     </main>
   );
 }
+
 
 
 
