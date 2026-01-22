@@ -79,7 +79,7 @@ const LEVELS: Level[] = [
         price: "35 000 FCFA / 53 €",
         vehicles: "BMW M Performance • Mercedes AMG",
         includes: "Briefing • Tours reconnaissance • Tours performance",
-        img: "/slide-2.jpg",
+        img: "/slide-12.webp",
       },
     ],
   },
@@ -551,4 +551,5 @@ export default function FormationsPage() {
     </main>
   );
 }
+
 
