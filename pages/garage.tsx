@@ -56,7 +56,7 @@ export default function GaragePage() {
       <img
         src="/logo-sl-automotive.png"
         alt="SL Automotive logo"
-        className="h-28 w-auto"
+        className="h-16 w-auto"
       />
     </a>
 
@@ -365,5 +365,6 @@ export default function GaragePage() {
     </main>
   );
 }
+
 
 
