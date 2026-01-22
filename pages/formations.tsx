@@ -137,7 +137,7 @@ const MECH = {
     "Le paddock ne tourne pas sans eux. Une formation technique en environnement compétition.",
   price: "450 000 FCFA / 685 €",
   vehicles: "Karts • GT • Voitures de course",
-  image: "/slide-6.jpg",
+  image: "/slide-14.webp",
   bullets: [
     "Mécanique spécifique sport auto",
     "Préparation & réglages châssis",
@@ -551,6 +551,7 @@ export default function FormationsPage() {
     </main>
   );
 }
+
 
 
 
