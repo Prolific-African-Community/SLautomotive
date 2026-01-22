@@ -87,7 +87,7 @@ export default function AcademyPage() {
 
   {/* MOBILE MENU */}
   {menuOpen && (
-    <div className="lg:hidden bg-black/95 backdrop-blur border-t border-white/10">
+    <div className="lg:hidden bg-white/95 backdrop-blur border-t border-white/10">
       <div className="px-6 py-6 flex flex-col gap-5 text-sm font-semibold uppercase tracking-wide">
         {[
           { label: "L'Académie", href: "/academy" },
@@ -267,4 +267,5 @@ export default function AcademyPage() {
     </main>
   );
 }
+
 
