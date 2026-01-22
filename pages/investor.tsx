@@ -45,7 +45,7 @@ export default function InvestisseurPage() {
   className={cn(
     "fixed top-0 w-full z-50 transition-all",
     scrolled
-      ? "bg-white/90 backdrop-blur border-b border-white/80"
+      ? "bg-white/95 backdrop-blur border-b border-white/80"
       : "bg-transparent"
   )}
 >
@@ -287,5 +287,6 @@ export default function InvestisseurPage() {
     </main>
   );
 }
+
 
 
