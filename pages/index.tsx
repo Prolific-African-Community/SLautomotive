@@ -61,9 +61,10 @@ Prix : sur sélection.`,
 /* ------------------ Page ------------------ */
 export default function StanleyRacingAcademyHome() {
   const [scrolled, setScrolled] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [heroIdx, setHeroIdx] = useState(0);
   const [activeFormation, setActiveFormation] = useState<number | null>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
+  
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -81,6 +82,7 @@ export default function StanleyRacingAcademyHome() {
 
   return (
     <main className="bg-slate-50 text-slate-900">
+
        {/* HEADER */}
 <header
   className={cn(
@@ -144,7 +146,7 @@ export default function StanleyRacingAcademyHome() {
 
   {/* MOBILE MENU */}
   {menuOpen && (
-    <div className="lg:hidden bg-black/95 backdrop-blur border-t border-white/10">
+    <div className="lg:hidden bg-white/95 backdrop-blur border-t border-white/10">
       <div className="px-6 py-6 flex flex-col gap-5 text-sm font-semibold uppercase tracking-wide">
         {[
           { label: "L'Académie", href: "/academy" },
@@ -443,6 +445,7 @@ export default function StanleyRacingAcademyHome() {
     </main>
   );
 }
+
 
 
 
