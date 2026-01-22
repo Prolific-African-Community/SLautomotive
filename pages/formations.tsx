@@ -71,7 +71,7 @@ const LEVELS: Level[] = [
         price: "65 000 FCFA / 99 €",
         vehicles: "Citroën C3 • Peugeot 208 (sécurité)",
         includes: "Théorie • Pratique • Débriefing",
-        img: "/slide-2.jpg",
+        img: "/slide-13.webp",
       },
       {
         title: "Baptême de vitesse",
@@ -551,5 +551,6 @@ export default function FormationsPage() {
     </main>
   );
 }
+
 
 
