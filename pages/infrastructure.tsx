@@ -125,7 +125,7 @@ export default function InfrastructurePage() {
           </div>
           <div className="relative w-full max-w-xl rounded-2xl overflow-hidden shadow-lg">
             <img
-              src="/slide-4.jpg"
+              src="/slide-15.png"
               alt="Lac Rose – Localisation du circuit"
               className="w-full h-full object-cover"
             />
@@ -290,5 +290,6 @@ export default function InfrastructurePage() {
     </main>
   );
 }
+
 
 
