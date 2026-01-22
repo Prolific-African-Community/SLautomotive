@@ -105,7 +105,7 @@ const LEVELS: Level[] = [
         price: "350 000 FCFA / 533 €",
         vehicles: "BMW M3 Cup • Clio Cup",
         includes: "3 jours intensifs • Sélection",
-        img: "/slide-2.jpg",
+        img: "/slide-10.webp",
       },
     ],
   },
@@ -551,3 +551,4 @@ export default function FormationsPage() {
     </main>
   );
 }
+
