@@ -7,7 +7,7 @@ const COMPLEX_COMPONENTS = [
   {
     title: "Piste de karting",
     desc: "Infrastructure de base dédiée à l’initiation et à la formation technique.",
-    img: "/infra-kart.webp",
+    img: "/kart-infra.webp",
   },
   {
     title: "Zones d’entraînement",
@@ -290,4 +290,5 @@ export default function InfrastructurePage() {
     </main>
   );
 }
+
 
