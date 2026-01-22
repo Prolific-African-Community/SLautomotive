@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useEffect, useState } from "react";
 
 /* ------------------ Utils ------------------ */
 type ClassValue = string | false | null | undefined;
@@ -18,6 +18,7 @@ const LEAD = "text-base md:text-lg text-slate-600 leading-relaxed";
 const BODY = "text-base text-slate-600 leading-relaxed";
 
 export default function GaragePage() {
+  const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [step, setStep] = useState(1);
   const [intervention, setIntervention] = useState<string | null>(null);
@@ -29,7 +30,15 @@ export default function GaragePage() {
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 20);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   return (
+    
     <main className="bg-slate-50 text-slate-900 font-sans leading-relaxed">
       {/* HEADER */}
       <header
@@ -356,3 +365,4 @@ export default function GaragePage() {
     </main>
   );
 }
+
