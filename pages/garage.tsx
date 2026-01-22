@@ -18,10 +18,10 @@ const LEAD = "text-base md:text-lg text-slate-600 leading-relaxed";
 const BODY = "text-base text-slate-600 leading-relaxed";
 
 export default function GaragePage() {
+  const [menuOpen, setMenuOpen] = useState(false);
   const [step, setStep] = useState(1);
   const [intervention, setIntervention] = useState<string | null>(null);
   const [client, setClient] = useState({ firstName: "", lastName: "", email: "", phone: "" });
-  const [menuOpen, setMenuOpen] = useState(false);
 
   const goToAssistant = () => {
     setStep(1);
@@ -31,12 +31,12 @@ export default function GaragePage() {
 
   return (
     <main className="bg-slate-50 text-slate-900 font-sans leading-relaxed">
-       {/* HEADER */}
-<header
+      {/* HEADER */}
+      <header
   className={cn(
     "fixed top-0 w-full z-50 transition-all",
     scrolled
-      ? "bg-black/80 backdrop-blur border-b border-white/10"
+      ? "bg-white/80 backdrop-blur border-b border-white/10"
       : "bg-transparent"
   )}
 >
@@ -45,7 +45,7 @@ export default function GaragePage() {
     {/* Logo */}
     <a href="/" className="flex items-center">
       <img
-        src="/logo-sl-automotive.png"
+        src="/logo-sl-automotive.jpg"
         alt="SL Automotive logo"
         className="h-28 w-auto"
       />
@@ -64,7 +64,7 @@ export default function GaragePage() {
     {/* Desktop CTA */}
     <a
       href="#contact"
-      className="hidden lg:inline-flex no-underline bg-orange-600 text-white px-6 py-3 rounded-full text-sm font-semibold hover:bg-orange-700 transition"
+      className="hidden lg:inline-flex no-underline bg-orange-600 text-black px-6 py-3 rounded-full text-sm font-semibold hover:bg-orange-700 transition"
     >
       Contact
     </a>
@@ -73,7 +73,7 @@ export default function GaragePage() {
     <button
       type="button"
       onClick={() => setMenuOpen((v) => !v)}
-      className="lg:hidden inline-flex items-center justify-center rounded-md p-2 text-slate-200 hover:bg-white/10 transition"
+      className="lg:hidden inline-flex items-center justify-center rounded-md p-2 text-slate-200 hover:bg-white/80 transition"
       aria-label="Ouvrir le menu"
     >
       <svg
@@ -94,7 +94,7 @@ export default function GaragePage() {
 
   {/* MOBILE MENU */}
   {menuOpen && (
-    <div className="lg:hidden bg-black/95 backdrop-blur border-t border-white/10">
+    <div className="lg:hidden bg-white/95 backdrop-blur border-t border-white/10">
       <div className="px-6 py-6 flex flex-col gap-5 text-sm font-semibold uppercase tracking-wide">
         {[
           { label: "L'Académie", href: "/academy" },
@@ -117,7 +117,7 @@ export default function GaragePage() {
         <a
           href="#contact"
           onClick={() => setMenuOpen(false)}
-          className="mt-4 inline-flex justify-center rounded-full bg-orange-600 px-6 py-3 text-white font-semibold hover:bg-orange-700 transition no-underline"
+          className="mt-4 inline-flex justify-center rounded-full bg-orange-600 px-6 py-3 text-black font-semibold hover:bg-orange-700 transition no-underline"
         >
           Contact
         </a>
@@ -356,4 +356,3 @@ export default function GaragePage() {
     </main>
   );
 }
-
