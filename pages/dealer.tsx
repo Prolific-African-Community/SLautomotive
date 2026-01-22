@@ -6,7 +6,6 @@ import React, { useEffect, useMemo, useState } from "react";
 type ClassValue = string | false | null | undefined;
 const cn = (...c: ClassValue[]) => c.filter(Boolean).join(" ");
 
-
 type Vehicle = {
   stockId: string;
   marque: string;
@@ -30,6 +29,7 @@ type Vehicle = {
 
 export default function Dealer() {
   const [scrolled, setScrolled] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -131,42 +131,101 @@ export default function Dealer() {
 
   return (
     <main className="bg-black text-white min-h-screen">
-       {/* HEADER */}
-       <header
-        className={cn(
-          "fixed top-0 w-full z-50 transition-all",
-          scrolled
-            ? "bg-black/80 backdrop-blur border-b border-slate-200"
-            : "bg-transparent"
-        )}
+      {/* HEADER */}
+<header
+  className={cn(
+    "fixed top-0 w-full z-50 transition-all",
+    scrolled
+      ? "bg-black/80 backdrop-blur border-b border-white/10"
+      : "bg-transparent"
+  )}
+>
+  {/* NAV BAR */}
+  <nav className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+    {/* Logo */}
+    <a href="/" className="flex items-center">
+      <img
+        src="/logo-sl-automotive.jpg"
+        alt="SL Automotive logo"
+        className="h-28 w-auto"
+      />
+    </a>
+
+    {/* Desktop menu */}
+    <div className="hidden lg:flex gap-8 text-sm font-semibold uppercase tracking-wide">
+      <a href="/academy" className="text-slate-400 no-underline hover:text-orange-600">L'Académie</a>
+      <a href="/formations" className="text-slate-400 no-underline hover:text-orange-600">Formations</a>
+      <a href="/investor" className="text-slate-400 no-underline hover:text-orange-600">Investisseurs</a>
+      <a href="/infrastructure" className="text-slate-400 no-underline hover:text-orange-600">Infrastructure</a>
+      <a href="/dealer" className="text-slate-400 no-underline hover:text-orange-600">Dealer</a>
+      <a href="/garage" className="text-slate-400 no-underline hover:text-orange-600">Garage</a>
+    </div>
+
+    {/* Desktop CTA */}
+    <a
+      href="#contact"
+      className="hidden lg:inline-flex no-underline bg-yellow-400 text-black px-6 py-3 rounded-full text-sm font-semibold hover:bg-orange-600 transition"
+    >
+      Contact
+    </a>
+
+    {/* Mobile burger */}
+    <button
+      type="button"
+      onClick={() => setMenuOpen((v) => !v)}
+      className="lg:hidden inline-flex items-center justify-center rounded-md p-2 text-slate-200 hover:bg-white/10 transition"
+      aria-label="Ouvrir le menu"
+    >
+      <svg
+        className="h-6 w-6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        viewBox="0 0 24 24"
       >
-        <nav className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-          <a href="/" className="flex items-center gap-3">
-            <img
-              src="/logo-sl-automotive.jpg"
-              alt="SL Automotive logo"
-              className="h-36 w-auto"
-            />
-            {/* Wordmark volontairement supprimé pour garder uniquement le logo */}
-          </a>
+        {menuOpen ? (
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        ) : (
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+        )}
+      </svg>
+    </button>
+  </nav>
 
-          <div className="hidden lg:flex gap-8 text-sm font-semibold uppercase tracking-wide">
-            <a href="/academy" className="text-slate-400 no-underline hover:text-orange-600">L'Académie</a>
-            <a href="/formations" className="text-slate-400 no-underline hover:text-orange-600">Formations</a>
-            <a href="/investor" className="text-slate-400 no-underline hover:text-orange-600">Investisseurs</a>
-            <a href="/infrastructure" className="text-slate-400 no-underline hover:text-orange-600">Infrastructure</a>
-            <a href="/dealer" className="text-slate-400 no-underline hover:text-orange-600">Dealer</a>
-            <a href="/garage" className="text-slate-400 no-underline hover:text-orange-600">Garage</a>
-          </div>
-
+  {/* MOBILE MENU */}
+  {menuOpen && (
+    <div className="lg:hidden bg-black/95 backdrop-blur border-t border-white/10">
+      <div className="px-6 py-6 flex flex-col gap-5 text-sm font-semibold uppercase tracking-wide">
+        {[
+          { label: "L'Académie", href: "/academy" },
+          { label: "Formations", href: "/formations" },
+          { label: "Investisseurs", href: "/investor" },
+          { label: "Infrastructure", href: "/infrastructure" },
+          { label: "Dealer", href: "/dealer" },
+          { label: "Garage", href: "/garage" },
+        ].map(({ label, href }) => (
           <a
-            href="#contact"
-            className="no-underline bg-yellow-400 text-black px-6 py-3 rounded-full text-sm font-semibold hover:bg-orange-600 transition"
+            key={label}
+            href={href}
+            onClick={() => setMenuOpen(false)}
+            className="text-slate-300 no-underline hover:text-orange-500 transition"
           >
-            Contact
+            {label}
           </a>
-        </nav>
-      </header>
+        ))}
+
+        <a
+          href="#contact"
+          onClick={() => setMenuOpen(false)}
+          className="mt-4 inline-flex justify-center rounded-full bg-yellow-400 px-6 py-3 text-black font-semibold hover:bg-orange-600 transition no-underline"
+        >
+          Contact
+        </a>
+      </div>
+    </div>
+  )}
+</header>
+
 
       <div className="pt-24 font-sans">
 {/* Main */}
