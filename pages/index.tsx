@@ -88,7 +88,7 @@ export default function StanleyRacingAcademyHome() {
   className={cn(
     "fixed top-0 w-full z-50 transition-all",
     scrolled
-      ? "bg-black/80 backdrop-blur border-b border-white/10"
+      ? "bg-white/80 backdrop-blur border-b border-white/10"
       : "bg-transparent"
   )}
 >
@@ -445,6 +445,7 @@ export default function StanleyRacingAcademyHome() {
     </main>
   );
 }
+
 
 
 
