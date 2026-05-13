@@ -148,7 +148,7 @@ export default function Dealer() {
             <a href="/dealer" className="text-yellow-300 no-underline">
               Véhicules disponibles
             </a>
-            <a href="/garage" className="text-white no-underline hover:text-yellow-300">
+            <a href="/" className="text-white no-underline hover:text-yellow-300">
               Garage
             </a>
             <a href="#stock" className="text-white no-underline hover:text-yellow-300">
@@ -156,6 +156,9 @@ export default function Dealer() {
             </a>
             <a href="/process" className="text-white no-underline hover:text-yellow-300">
               Process
+            </a>
+            <a href="/dashboard/sourcing" className="text-white no-underline hover:text-yellow-300">
+              Sourcing
             </a>
           </div>
 
