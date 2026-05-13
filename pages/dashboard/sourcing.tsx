@@ -462,6 +462,31 @@ function cardClass(extra = "") {
   return `group rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-950 via-zinc-950 to-zinc-900/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-all duration-300 hover:-translate-y-0.5 hover:border-yellow-300/40 hover:shadow-[0_0_40px_rgba(250,204,21,0.07),inset_0_1px_0_rgba(255,255,255,0.06)] ${extra}`;
 }
 
+async function fetchJson<T = any>(url: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(url, options);
+  const text = await res.text();
+
+  try {
+    const json = JSON.parse(text);
+
+    if (!res.ok) {
+      throw new Error(json.message || `Erreur API ${res.status} sur ${url}`);
+    }
+
+    return json;
+  } catch (err: any) {
+    if (text.trim().startsWith("<!DOCTYPE") || text.trim().startsWith("<html")) {
+      throw new Error(
+        `Endpoint non JSON : ${url} — status ${res.status}. L’API renvoie une page HTML.`
+      );
+    }
+
+    throw new Error(
+      `Réponse invalide depuis ${url} — status ${res.status} — ${text.slice(0, 180)}`
+    );
+  }
+}
+
 export default function SourcingDashboard() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("overview");
 
@@ -523,370 +548,404 @@ export default function SourcingDashboard() {
   }
 
   async function loadRules() {
-    try {
-      const res = await fetch("/api/sourcing/rules");
-      const json = await res.json();
+  try {
+    const json = await fetchJson<{
+      success: boolean;
+      data?: SourcingRule[];
+      message?: string;
+    }>("/api/sourcing/rules");
 
-      if (!json.success) {
-        throw new Error(json.message || "Impossible de charger les règles.");
-      }
-
-      setRules(json.data || []);
-    } catch (err: any) {
-      setRuleError(err?.message || "Erreur chargement règles.");
-    }
-  }
-
-  async function loadListings() {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const res = await fetch("/api/sourcing/listings");
-      const json: ApiResponse = await res.json();
-
-      if (!json.success) {
-        throw new Error(json.message || "Impossible de charger les annonces.");
-      }
-
-      setListings(json.data || []);
-    } catch (err: any) {
-      setError(err?.message || "Erreur inconnue.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function refreshAll() {
-    await Promise.all([loadListings(), loadRules()]);
-  }
-
-  async function createRule(e: FormEvent) {
-    e.preventDefault();
-
-    try {
-      setSavingRule(true);
-      setRuleError(null);
-      setRuleActionMessage(null);
-
-      if (ruleForm.countries.length === 0) {
-        throw new Error("Sélectionne au moins un pays.");
-      }
-
-      if (ruleForm.sources.length === 0) {
-        throw new Error("Sélectionne au moins une source.");
-      }
-
-      const res = await fetch("/api/sourcing/rules", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          brand: ruleForm.brand.trim(),
-          model: ruleForm.model.trim(),
-          yearMin: toNumberOrNull(ruleForm.yearMin),
-          yearMax: toNumberOrNull(ruleForm.yearMax),
-          priceMax: toNumberOrNull(ruleForm.priceMax),
-          mileageMax: toNumberOrNull(ruleForm.mileageMax),
-          countries: ruleForm.countries,
-          sources: ruleForm.sources,
-          isActive: ruleForm.isActive,
-        }),
-      });
-
-      const json = await res.json();
-
-      if (!json.success) {
-        throw new Error(json.message || "Impossible de créer la règle.");
-      }
-
-      resetRuleForm();
-      setShowRuleForm(false);
-      setActiveTab("rules");
-      await loadRules();
-    } catch (err: any) {
-      setRuleError(err?.message || "Erreur création règle.");
-    } finally {
-      setSavingRule(false);
-    }
-  }
-
-  async function runRule(ruleId: string) {
-    try {
-      setRunningRuleId(ruleId);
-      setRuleError(null);
-      setRuleActionMessage(null);
-
-      const res = await fetch(`/api/sourcing/run-rule/${ruleId}`, {
-        method: "POST",
-      });
-
-      const json = await res.json();
-
-      if (!json.success) {
-        throw new Error(json.message || "Impossible de lancer le sourcing.");
-      }
-
-      const data = json.data;
-
-      setRuleActionMessage(
-        `Sourcing terminé : ${data.rawExtractedCount || 0} trouvées, ${
-          data.extractedCount || 0
-        } retenues, ${data.createdCount || 0} créées, ${data.skippedCount || 0} ignorées.`
-      );
-
-      await refreshAll();
-    } catch (err: any) {
-      setRuleError(err?.message || "Erreur pendant le sourcing.");
-    } finally {
-      setRunningRuleId(null);
-    }
-  }
-
-  async function cleanRuleListings(ruleId: string) {
-    const confirmed = window.confirm("Supprimer toutes les annonces rattachées à cette règle ?");
-
-    if (!confirmed) return;
-
-    try {
-      setCleaningRuleId(ruleId);
-      setRuleError(null);
-      setRuleActionMessage(null);
-
-      const res = await fetch(`/api/sourcing/rules/${ruleId}/listings`, {
-        method: "DELETE",
-      });
-
-      const json = await res.json();
-
-      if (!json.success) {
-        throw new Error(json.message || "Impossible de nettoyer les annonces.");
-      }
-
-      setRuleActionMessage(`Nettoyage terminé : ${json.data?.deletedCount || 0} annonce(s) supprimée(s).`);
-
-      await refreshAll();
-    } catch (err: any) {
-      setRuleError(err?.message || "Erreur pendant le nettoyage.");
-    } finally {
-      setCleaningRuleId(null);
-    }
-  }
-
-  async function deleteRule(ruleId: string) {
-    const confirmed = window.confirm("Supprimer définitivement cette règle de sourcing ?");
-
-    if (!confirmed) return;
-
-    try {
-      setRuleError(null);
-      setRuleActionMessage(null);
-
-      const res = await fetch(`/api/sourcing/rules/${ruleId}`, {
-        method: "DELETE",
-      });
-
-      const json = await res.json();
-
-      if (!json.success) {
-        throw new Error(json.message || "Impossible de supprimer la règle.");
-      }
-
-      setRuleActionMessage("Règle supprimée.");
-      await refreshAll();
-    } catch (err: any) {
-      setRuleError(err?.message || "Erreur pendant la suppression de la règle.");
-    }
-  }
-
-  async function extractFromUrl() {
-    if (!form.sourceUrl.trim()) {
-      setFormError("Colle d’abord l’URL de l’annonce.");
-      return;
+    if (!json.success) {
+      throw new Error(json.message || "Impossible de charger les règles.");
     }
 
-    try {
-      setExtracting(true);
-      setFormError(null);
+    setRules(json.data || []);
+  } catch (err: any) {
+    setRuleError(err?.message || "Erreur chargement règles.");
+  }
+}
 
-      const res = await fetch("/api/sourcing/extract", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          sourceUrl: form.sourceUrl,
-        }),
-      });
+async function loadListings() {
+  try {
+    setLoading(true);
+    setError(null);
 
-      const json = await res.json();
+    const json = await fetchJson<ApiResponse>("/api/sourcing/listings");
 
-      if (!json.success) {
-        throw new Error(json.message || "Impossible d’extraire les infos.");
-      }
-
-      const data = json.data;
-
-      setForm((prev) => ({
-        ...prev,
-        source: data.source || prev.source,
-        sourceUrl: data.sourceUrl || prev.sourceUrl,
-        title: data.title || prev.title,
-        imageUrl: data.imageUrl || prev.imageUrl,
-      }));
-    } catch (err: any) {
-      setFormError(err?.message || "Erreur pendant l’extraction.");
-    } finally {
-      setExtracting(false);
+    if (!json.success) {
+      throw new Error(json.message || "Impossible de charger les annonces.");
     }
+
+    setListings(json.data || []);
+  } catch (err: any) {
+    setError(err?.message || "Erreur inconnue.");
+  } finally {
+    setLoading(false);
+  }
+}
+
+async function refreshAll() {
+  await Promise.all([loadListings(), loadRules()]);
+}
+
+async function createRule(e: FormEvent) {
+  e.preventDefault();
+
+  try {
+    setSavingRule(true);
+    setRuleError(null);
+    setRuleActionMessage(null);
+
+    if (ruleForm.countries.length === 0) {
+      throw new Error("Sélectionne au moins un pays.");
+    }
+
+    if (ruleForm.sources.length === 0) {
+      throw new Error("Sélectionne au moins une source.");
+    }
+
+    const json = await fetchJson<{
+      success: boolean;
+      data?: SourcingRule;
+      message?: string;
+    }>("/api/sourcing/rules", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        brand: ruleForm.brand.trim(),
+        model: ruleForm.model.trim(),
+        yearMin: toNumberOrNull(ruleForm.yearMin),
+        yearMax: toNumberOrNull(ruleForm.yearMax),
+        priceMax: toNumberOrNull(ruleForm.priceMax),
+        mileageMax: toNumberOrNull(ruleForm.mileageMax),
+        countries: ruleForm.countries,
+        sources: ruleForm.sources,
+        isActive: ruleForm.isActive,
+      }),
+    });
+
+    if (!json.success) {
+      throw new Error(json.message || "Impossible de créer la règle.");
+    }
+
+    resetRuleForm();
+    setShowRuleForm(false);
+    setActiveTab("rules");
+    await loadRules();
+  } catch (err: any) {
+    setRuleError(err?.message || "Erreur création règle.");
+  } finally {
+    setSavingRule(false);
+  }
+}
+
+async function runRule(ruleId: string) {
+  try {
+    setRunningRuleId(ruleId);
+    setRuleError(null);
+    setRuleActionMessage(null);
+
+    const json = await fetchJson<{
+      success: boolean;
+      data?: {
+        rawExtractedCount?: number;
+        extractedCount?: number;
+        createdCount?: number;
+        skippedCount?: number;
+      };
+      message?: string;
+    }>(`/api/sourcing/run-rule/${ruleId}`, {
+      method: "POST",
+    });
+
+    if (!json.success) {
+      throw new Error(json.message || "Impossible de lancer le sourcing.");
+    }
+
+    const data = json.data || {};
+
+    setRuleActionMessage(
+      `Sourcing terminé : ${data.rawExtractedCount || 0} trouvées, ${
+        data.extractedCount || 0
+      } retenues, ${data.createdCount || 0} créées, ${
+        data.skippedCount || 0
+      } ignorées.`
+    );
+
+    await refreshAll();
+  } catch (err: any) {
+    setRuleError(err?.message || "Erreur pendant le sourcing.");
+  } finally {
+    setRunningRuleId(null);
+  }
+}
+
+async function cleanRuleListings(ruleId: string) {
+  const confirmed = window.confirm(
+    "Supprimer toutes les annonces rattachées à cette règle ?"
+  );
+
+  if (!confirmed) return;
+
+  try {
+    setCleaningRuleId(ruleId);
+    setRuleError(null);
+    setRuleActionMessage(null);
+
+    const json = await fetchJson<{
+      success: boolean;
+      data?: { deletedCount?: number };
+      message?: string;
+    }>(`/api/sourcing/rules/${ruleId}/listings`, {
+      method: "DELETE",
+    });
+
+    if (!json.success) {
+      throw new Error(json.message || "Impossible de nettoyer les annonces.");
+    }
+
+    setRuleActionMessage(
+      `Nettoyage terminé : ${json.data?.deletedCount || 0} annonce(s) supprimée(s).`
+    );
+
+    await refreshAll();
+  } catch (err: any) {
+    setRuleError(err?.message || "Erreur pendant le nettoyage.");
+  } finally {
+    setCleaningRuleId(null);
+  }
+}
+
+async function deleteRule(ruleId: string) {
+  const confirmed = window.confirm(
+    "Supprimer définitivement cette règle de sourcing ?"
+  );
+
+  if (!confirmed) return;
+
+  try {
+    setRuleError(null);
+    setRuleActionMessage(null);
+
+    const json = await fetchJson<{
+      success: boolean;
+      message?: string;
+    }>(`/api/sourcing/rules/${ruleId}`, {
+      method: "DELETE",
+    });
+
+    if (!json.success) {
+      throw new Error(json.message || "Impossible de supprimer la règle.");
+    }
+
+    setRuleActionMessage("Règle supprimée.");
+    await refreshAll();
+  } catch (err: any) {
+    setRuleError(err?.message || "Erreur pendant la suppression de la règle.");
+  }
+}
+
+async function extractFromUrl() {
+  if (!form.sourceUrl.trim()) {
+    setFormError("Colle d’abord l’URL de l’annonce.");
+    return;
   }
 
-  async function updateListingStatus(id: string, internalStatus: string) {
-    try {
-      const res = await fetch(`/api/sourcing/listings/${id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ internalStatus }),
-      });
+  try {
+    setExtracting(true);
+    setFormError(null);
 
-      const json = await res.json();
+    const json = await fetchJson<{
+      success: boolean;
+      data?: Partial<NewListingForm>;
+      message?: string;
+    }>("/api/sourcing/extract", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        sourceUrl: form.sourceUrl,
+      }),
+    });
 
-      if (!json.success) {
-        throw new Error(json.message || "Impossible de modifier le statut.");
-      }
-
-      await loadListings();
-    } catch (err: any) {
-      alert(err?.message || "Erreur pendant la mise à jour.");
+    if (!json.success) {
+      throw new Error(json.message || "Impossible d’extraire les infos.");
     }
+
+    const data = json.data || {};
+
+    setForm((prev) => ({
+      ...prev,
+      source: data.source || prev.source,
+      sourceUrl: data.sourceUrl || prev.sourceUrl,
+      title: data.title || prev.title,
+      imageUrl: data.imageUrl || prev.imageUrl,
+    }));
+  } catch (err: any) {
+    setFormError(err?.message || "Erreur pendant l’extraction.");
+  } finally {
+    setExtracting(false);
   }
+}
 
-  async function deleteListing(id: string) {
-    const confirmed = window.confirm("Supprimer cette annonce du dashboard sourcing ?");
+async function updateListingStatus(id: string, internalStatus: string) {
+  try {
+    const json = await fetchJson<{
+      success: boolean;
+      message?: string;
+    }>(`/api/sourcing/listings/${id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ internalStatus }),
+    });
 
-    if (!confirmed) return;
-
-    try {
-      const res = await fetch(`/api/sourcing/listings/${id}`, {
-        method: "DELETE",
-      });
-
-      const json = await res.json();
-
-      if (!json.success) {
-        throw new Error(json.message || "Impossible de supprimer l’annonce.");
-      }
-
-      await refreshAll();
-    } catch (err: any) {
-      alert(err?.message || "Erreur pendant la suppression.");
+    if (!json.success) {
+      throw new Error(json.message || "Impossible de modifier le statut.");
     }
-  }
 
-  function openEditForm(listing: Listing) {
+    await loadListings();
+  } catch (err: any) {
+    alert(err?.message || "Erreur pendant la mise à jour.");
+  }
+}
+
+async function deleteListing(id: string) {
+  const confirmed = window.confirm(
+    "Supprimer cette annonce du dashboard sourcing ?"
+  );
+
+  if (!confirmed) return;
+
+  try {
+    const json = await fetchJson<{
+      success: boolean;
+      message?: string;
+    }>(`/api/sourcing/listings/${id}`, {
+      method: "DELETE",
+    });
+
+    if (!json.success) {
+      throw new Error(json.message || "Impossible de supprimer l’annonce.");
+    }
+
+    await refreshAll();
+  } catch (err: any) {
+    alert(err?.message || "Erreur pendant la suppression.");
+  }
+}
+
+function openEditForm(listing: Listing) {
+  setEditError(null);
+
+  setEditingListing({
+    id: listing.id,
+    internalStatus: listing.internalStatus,
+    price: listing.price?.toString() || "",
+    repairCostEstimate: listing.analysis?.repairCostEstimate?.toString() || "",
+    transportCost: listing.analysis?.transportCost?.toString() || "",
+    customsCost: listing.analysis?.customsCost?.toString() || "",
+    otherCosts: listing.analysis?.otherCosts?.toString() || "",
+    expectedSalePrice: listing.analysis?.expectedSalePrice?.toString() || "",
+    plannedWorks: listing.analysis?.plannedWorks || "",
+    notes: listing.analysis?.notes || "",
+    priorityScore: listing.analysis?.priorityScore?.toString() || "",
+    isFavorite: Boolean(listing.analysis?.isFavorite),
+  });
+}
+
+function updateEditForm<K extends keyof EditListingForm>(
+  key: K,
+  value: EditListingForm[K]
+) {
+  setEditingListing((prev) => {
+    if (!prev) return prev;
+    return { ...prev, [key]: value };
+  });
+}
+
+async function saveEditForm(e: FormEvent) {
+  e.preventDefault();
+
+  if (!editingListing) return;
+
+  try {
+    setUpdating(true);
     setEditError(null);
 
-    setEditingListing({
-      id: listing.id,
-      internalStatus: listing.internalStatus,
-      price: listing.price?.toString() || "",
-      repairCostEstimate: listing.analysis?.repairCostEstimate?.toString() || "",
-      transportCost: listing.analysis?.transportCost?.toString() || "",
-      customsCost: listing.analysis?.customsCost?.toString() || "",
-      otherCosts: listing.analysis?.otherCosts?.toString() || "",
-      expectedSalePrice: listing.analysis?.expectedSalePrice?.toString() || "",
-      plannedWorks: listing.analysis?.plannedWorks || "",
-      notes: listing.analysis?.notes || "",
-      priorityScore: listing.analysis?.priorityScore?.toString() || "",
-      isFavorite: Boolean(listing.analysis?.isFavorite),
+    const json = await fetchJson<{
+      success: boolean;
+      message?: string;
+    }>(`/api/sourcing/listings/${editingListing.id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        internalStatus: editingListing.internalStatus,
+        price: editingListing.price,
+        repairCostEstimate: editingListing.repairCostEstimate,
+        transportCost: editingListing.transportCost,
+        customsCost: editingListing.customsCost,
+        otherCosts: editingListing.otherCosts,
+        expectedSalePrice: editingListing.expectedSalePrice,
+        plannedWorks: editingListing.plannedWorks,
+        notes: editingListing.notes,
+        priorityScore: editingListing.priorityScore,
+        isFavorite: editingListing.isFavorite,
+      }),
     });
-  }
 
-  function updateEditForm<K extends keyof EditListingForm>(key: K, value: EditListingForm[K]) {
-    setEditingListing((prev) => {
-      if (!prev) return prev;
-      return { ...prev, [key]: value };
+    if (!json.success) {
+      throw new Error(json.message || "Impossible de modifier l’analyse.");
+    }
+
+    setEditingListing(null);
+    await refreshAll();
+  } catch (err: any) {
+    setEditError(err?.message || "Erreur pendant la modification.");
+  } finally {
+    setUpdating(false);
+  }
+}
+
+async function createListing(e: FormEvent) {
+  e.preventDefault();
+
+  try {
+    setSaving(true);
+    setFormError(null);
+
+    const json = await fetchJson<{
+      success: boolean;
+      data?: Listing;
+      message?: string;
+    }>("/api/sourcing/listings", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(form),
     });
-  }
 
-  async function saveEditForm(e: FormEvent) {
-    e.preventDefault();
-
-    if (!editingListing) return;
-
-    try {
-      setUpdating(true);
-      setEditError(null);
-
-      const res = await fetch(`/api/sourcing/listings/${editingListing.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          internalStatus: editingListing.internalStatus,
-          price: editingListing.price,
-          repairCostEstimate: editingListing.repairCostEstimate,
-          transportCost: editingListing.transportCost,
-          customsCost: editingListing.customsCost,
-          otherCosts: editingListing.otherCosts,
-          expectedSalePrice: editingListing.expectedSalePrice,
-          plannedWorks: editingListing.plannedWorks,
-          notes: editingListing.notes,
-          priorityScore: editingListing.priorityScore,
-          isFavorite: editingListing.isFavorite,
-        }),
-      });
-
-      const json = await res.json();
-
-      if (!json.success) {
-        throw new Error(json.message || "Impossible de modifier l’analyse.");
-      }
-
-      setEditingListing(null);
-      await refreshAll();
-    } catch (err: any) {
-      setEditError(err?.message || "Erreur pendant la modification.");
-    } finally {
-      setUpdating(false);
+    if (!json.success) {
+      throw new Error(json.message || "Impossible de créer l’annonce.");
     }
+
+    resetForm();
+    setShowForm(false);
+    setActiveTab("listings");
+    await refreshAll();
+  } catch (err: any) {
+    setFormError(err?.message || "Erreur inconnue.");
+  } finally {
+    setSaving(false);
   }
-
-  async function createListing(e: FormEvent) {
-    e.preventDefault();
-
-    try {
-      setSaving(true);
-      setFormError(null);
-
-      const res = await fetch("/api/sourcing/listings", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(form),
-      });
-
-      const json = await res.json();
-
-      if (!json.success) {
-        throw new Error(json.message || "Impossible de créer l’annonce.");
-      }
-
-      resetForm();
-      setShowForm(false);
-      setActiveTab("listings");
-      await refreshAll();
-    } catch (err: any) {
-      setFormError(err?.message || "Erreur inconnue.");
-    } finally {
-      setSaving(false);
-    }
-  }
+}
 
   useEffect(() => {
     refreshAll();
