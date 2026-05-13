@@ -27,9 +27,20 @@ type Vehicle = {
   couleur?: string;
 };
 
+/* ------------------ Design tokens ------------------ */
+const H1 =
+  "text-5xl md:text-7xl font-black uppercase tracking-[-0.045em] leading-[0.95]";
+const H2 =
+  "text-3xl md:text-5xl font-black uppercase tracking-[-0.035em] leading-[1]";
+const H3 =
+  "text-xl md:text-2xl font-black uppercase tracking-[-0.02em] leading-[1.05]";
+const LEAD = "text-base md:text-lg text-zinc-300 leading-relaxed";
+const BODY = "text-sm md:text-base text-zinc-400 leading-relaxed";
+
 export default function Dealer() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [selectedCar, setSelectedCar] = useState<Vehicle | null>(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -56,12 +67,7 @@ export default function Dealer() {
         provenance: "DE",
         entretien: "Concession Audi",
         vinMasked: "WAUZZZ…1234",
-        options: [
-          "Matrix LED",
-          "Virtual Cockpit",
-          "Sièges sport chauffants",
-          "Toit pano",
-        ],
+        options: ["Matrix LED", "Virtual Cockpit", "Sièges sport chauffants", "Toit pano"],
         description:
           "Fin de leasing 🇩🇪, historique constructeur complet, contrôle 150 points. Dossier transparent et prêt à être transmis.",
       },
@@ -81,12 +87,7 @@ export default function Dealer() {
         provenance: "LU",
         entretien: "BMW Luxembourg",
         vinMasked: "WBA…5678",
-        options: [
-          "Driving Assistant",
-          "Live Cockpit Pro",
-          "Shadowline",
-          "Harman/Kardon",
-        ],
+        options: ["Driving Assistant", "Live Cockpit Pro", "Shadowline", "Harman/Kardon"],
         description:
           "Première main, suivi constructeur, fin de leasing. Rapport d’état détaillé disponible sur demande.",
       },
@@ -106,20 +107,13 @@ export default function Dealer() {
         provenance: "DE",
         entretien: "Mercedes-Benz",
         vinMasked: "WDD…9012",
-        options: [
-          "LED High Performance",
-          "COMAND",
-          "Pack Stationnement",
-          "Keyless-Go",
-        ],
+        options: ["LED High Performance", "COMAND", "Pack Stationnement", "Keyless-Go"],
         description:
           "Réservée. Dossier complet, CT à jour, transparence totale. Contacte-nous pour la prochaine dispo.",
       },
     ],
     []
   );
-
-  const [selectedCar, setSelectedCar] = useState<Vehicle | null>(null);
 
   const formatPrice = (n: number | null) =>
     n != null
@@ -130,337 +124,523 @@ export default function Dealer() {
       : "Prix sur demande";
 
   return (
-    <main className="bg-black text-white min-h-screen">
+    <main className="min-h-screen bg-[#070707] text-white font-sans leading-relaxed">
       {/* HEADER */}
-<header
-  className={cn(
-    "fixed top-0 w-full z-50 transition-all",
-    scrolled
-      ? "bg-black/80 backdrop-blur border-b border-white/10"
-      : "bg-transparent"
-  )}
->
-  {/* NAV BAR */}
-  <nav className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-    {/* Logo */}
-    <a href="/" className="flex items-center">
-      <img
-        src="/logo-sl-automotive.jpg"
-        alt="SL Automotive logo"
-        className="h-28 w-auto"
-      />
-    </a>
-
-    {/* Desktop menu */}
-    <div className="hidden lg:flex gap-8 text-sm font-semibold uppercase tracking-wide">
-      <a href="/academy" className="text-slate-400 no-underline hover:text-orange-600">L'Académie</a>
-      <a href="/formations" className="text-slate-400 no-underline hover:text-orange-600">Formations</a>
-      <a href="/investor" className="text-slate-400 no-underline hover:text-orange-600">Investisseurs</a>
-      <a href="/infrastructure" className="text-slate-400 no-underline hover:text-orange-600">Infrastructure</a>
-      <a href="/dealer" className="text-slate-400 no-underline hover:text-orange-600">Dealer</a>
-      <a href="/garage" className="text-slate-400 no-underline hover:text-orange-600">Garage</a>
-    </div>
-
-    {/* Desktop CTA */}
-    <a
-      href="#contact"
-      className="hidden lg:inline-flex no-underline bg-yellow-400 text-black px-6 py-3 rounded-full text-sm font-semibold hover:bg-orange-600 transition"
-    >
-      Contact
-    </a>
-
-    {/* Mobile burger */}
-    <button
-      type="button"
-      onClick={() => setMenuOpen((v) => !v)}
-      className="lg:hidden inline-flex items-center justify-center rounded-md p-2 text-slate-200 hover:bg-white/10 transition"
-      aria-label="Ouvrir le menu"
-    >
-      <svg
-        className="h-6 w-6"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        viewBox="0 0 24 24"
-      >
-        {menuOpen ? (
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-        ) : (
-          <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+      <header
+        className={cn(
+          "fixed top-0 w-full z-50 transition-all",
+          scrolled
+            ? "bg-black/90 backdrop-blur border-b border-yellow-300/20"
+            : "bg-transparent"
         )}
-      </svg>
-    </button>
-  </nav>
-
-  {/* MOBILE MENU */}
-  {menuOpen && (
-    <div className="lg:hidden bg-black/95 backdrop-blur border-t border-white/10">
-      <div className="px-6 py-6 flex flex-col gap-5 text-sm font-semibold uppercase tracking-wide">
-        {[
-          { label: "L'Académie", href: "/academy" },
-          { label: "Formations", href: "/formations" },
-          { label: "Investisseurs", href: "/investor" },
-          { label: "Infrastructure", href: "/infrastructure" },
-          { label: "Dealer", href: "/dealer" },
-          { label: "Garage", href: "/garage" },
-        ].map(({ label, href }) => (
-          <a
-            key={label}
-            href={href}
-            onClick={() => setMenuOpen(false)}
-            className="text-slate-300 no-underline hover:text-orange-500 transition"
-          >
-            {label}
-          </a>
-        ))}
-
-        <a
-          href="#contact"
-          onClick={() => setMenuOpen(false)}
-          className="mt-4 inline-flex justify-center rounded-full bg-yellow-400 px-6 py-3 text-black font-semibold hover:bg-orange-600 transition no-underline"
-        >
-          Contact
-        </a>
-      </div>
-    </div>
-  )}
-</header>
-
-
-      <div className="pt-24 font-sans">
-{/* Main */}
-      <div className="max-w-7xl mx-auto pt-24 px-6 py-16 relative">
-                {/* HERO */}
-        <section className="relative text-center px-6">
-          <h1 className="text-4xl md:text-6xl font-extrabold leading-tight text-white mt-4 mb-2">
-            Occasions d’exception. Zéro surprise.
-          </h1>
-
-          <div className="w-full max-w-6xl mx-auto">
+      >
+        <nav className="max-w-7xl mx-auto px-5 md:px-6 py-2 flex justify-between items-center">
+          <a href="/" className="flex items-center no-underline">
             <img
-              src="/Hero-sl2.jpg"
-              alt="SL Automotive — Occasions d’exception"
-              className="w-full max-h-[300px] object-cover rounded-lg shadow-lg"
+              src="/logo-sl-automotive2.png"
+              alt="SL Automotive logo"
+              className="h-24 md:h-24 w-auto"
             />
+          </a>
+
+          <div className="hidden lg:flex items-center gap-8 text-xs font-black uppercase tracking-[0.18em]">
+            
+            <a href="/dealer" className="text-yellow-300 no-underline">
+              Véhicules disponibles
+            </a>
+            <a href="/garage" className="text-white no-underline hover:text-yellow-300">
+              Garage
+            </a>
+            <a href="#stock" className="text-white no-underline hover:text-yellow-300">
+              Stock
+            </a>
+            <a href="/process" className="text-white no-underline hover:text-yellow-300">
+              Process
+            </a>
           </div>
 
-          <div className="mt-4 max-w-3xl mx-auto">
-            <p className="text-lg md:text-xl text-gray-200 mb-4">
-              Voitures en fin de leasing • Historique complet • Garantie disponible
-            </p>
+          <a
+            href="#contact"
+            className="hidden lg:inline-flex no-underline bg-yellow-300 text-black px-6 py-3 text-xs font-black uppercase tracking-wide hover:bg-white transition"
+          >
+            Contact
+          </a>
 
-            <div className="flex items-center justify-center gap-4">
+          <button
+            type="button"
+            onClick={() => setMenuOpen((v) => !v)}
+            className="lg:hidden inline-flex items-center justify-center border border-zinc-700 p-2 text-white hover:border-yellow-300 transition"
+            aria-label="Ouvrir le menu"
+          >
+            <svg
+              className="h-6 w-6"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              viewBox="0 0 24 24"
+            >
+              {menuOpen ? (
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              )}
+            </svg>
+          </button>
+        </nav>
+
+        {menuOpen && (
+          <div className="lg:hidden bg-black border-t border-zinc-800">
+            <div className="px-6 py-6 flex flex-col gap-5 text-sm font-black uppercase tracking-wide">
+              {[
+                { label: "L'Académie", href: "/academy" },
+                { label: "Formations", href: "/formations" },
+                { label: "Investisseurs", href: "/investor" },
+                { label: "Infrastructure", href: "/infrastructure" },
+                { label: "Dealer", href: "/dealer" },
+                { label: "Garage", href: "/garage" },
+                { label: "Stock", href: "#stock" },
+                { label: "Process", href: "#process" },
+              ].map(({ label, href }) => (
+                <a
+                  key={label}
+                  href={href}
+                  onClick={() => setMenuOpen(false)}
+                  className="text-white no-underline hover:text-yellow-300 transition"
+                >
+                  {label}
+                </a>
+              ))}
+
               <a
-                href="/dealer"
-                className="bg-yellow-400 text-black px-12 mt-12 py-4 rounded-full text-base font-semibold hover:scale-105 hover:bg-white no-underline transition"
+                href="#contact"
+                onClick={() => setMenuOpen(false)}
+                className="mt-4 inline-flex justify-center bg-yellow-300 px-6 py-3 text-black font-black no-underline"
               >
-                Voir le stock
-              </a>
-              <a
-                href="/process"
-                className="no-underline text-black bg-white px-6 py-4 mt-12 rounded-full text-base font-semibold hover:scale-105 hover:bg-black hover:text-white transition"
-              >
-                Notre processus
+                Contact
               </a>
             </div>
           </div>
-        </section>
+        )}
+      </header>
 
-        {/* Sélection du moment */}
-        <section className="mb-20">
-          <h2 className="text-3xl font-bold text-center mb-12 pt-24">
-            Sélection du moment
-          </h2>
+{/* HERO */}
+<section className="relative min-h-screen overflow-hidden bg-black px-5 md:px-6 pt-28">
+  {/* Light racing pattern */}
+  <div className="absolute inset-0 opacity-[0.05] bg-[linear-gradient(135deg,#fde047_0_10%,transparent_10%_20%,#fde047_20%_30%,transparent_30%_100%)] bg-[length:110px_110px]" />
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10 max-w-7xl mx-auto">
-            {vehicles.map((v) => (
+  <div className="relative z-10 max-w-7xl mx-auto min-h-[calc(100vh-7rem)] grid grid-cols-1 lg:grid-cols-[0.92fr_1.08fr] gap-12 items-center">
+    {/* LEFT CONTENT */}
+    <div>
+      <div className="inline-flex items-center gap-3 border border-yellow-300/40 bg-yellow-300/10 px-4 py-2">
+        <span className="h-2 w-2 bg-yellow-300" />
+        <span className="text-xs font-black uppercase tracking-[0.22em] text-yellow-300">
+          SL Automotive Dealer
+        </span>
+      </div>
+
+      <h1 className={cn("mt-7", H1)}>
+        Occasions
+        <br />
+        <span className="text-yellow-300">d’exception</span>
+        <br />
+        zéro surprise
+      </h1>
+
+      <p className="mt-7 max-w-xl text-base md:text-lg leading-relaxed text-zinc-300">
+        Véhicules sélectionnés, historiques vérifiés, dossiers transparents
+        et accompagnement complet jusqu’à la livraison.
+      </p>
+
+      <div className="mt-10 flex flex-wrap gap-4">
+        <a
+          href="#stock"
+          className="bg-yellow-300 text-black px-7 py-4 text-sm font-black uppercase tracking-wide no-underline hover:bg-white transition"
+        >
+          Voir le stock
+        </a>
+
+        <a
+          href="#process"
+          className="bg-white text-black px-7 py-4 text-sm font-black uppercase tracking-wide no-underline hover:bg-yellow-300 transition"
+        >
+          Notre processus
+        </a>
+      </div>
+
+      {/* Stats */}
+      <div className="mt-12 grid grid-cols-3 max-w-xl border border-zinc-800 bg-black/60">
+        {[
+          ["150", "Points contrôle"],
+          ["100%", "Dossier clair"],
+          ["DE/LU", "Sourcing premium"],
+        ].map(([value, label]) => (
+          <div
+            key={label}
+            className="p-5 border-r last:border-r-0 border-zinc-800"
+          >
+            <p className="text-3xl font-black text-yellow-300">{value}</p>
+            <p className="mt-2 text-[11px] font-black uppercase tracking-[0.16em] text-zinc-500">
+              {label}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    {/* RIGHT IMAGE CARD */}
+    <div className="relative">
+      <div className="absolute -inset-4 bg-yellow-300" />
+
+      <div className="relative bg-zinc-950 border border-zinc-800 p-4 md:p-5">
+        {/* Top racing strip */}
+        <div className="h-10 bg-yellow-300 mb-4 flex items-center px-4">
+          <div className="flex gap-2">
+            <span className="h-3 w-10 bg-black skew-x-[-25deg]" />
+            <span className="h-3 w-10 bg-black skew-x-[-25deg]" />
+            <span className="h-3 w-10 bg-black skew-x-[-25deg]" />
+          </div>
+        </div>
+
+        <div className="relative aspect-[4/3] overflow-hidden bg-black">
+          <img
+            src="/Hero-sl3.png"
+            alt="SL Automotive — véhicules premium"
+            className="h-full w-full object-cover object-center"
+          />
+
+          <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-transparent to-transparent" />
+
+          <div className="absolute left-4 bottom-4 right-4 flex items-end justify-between gap-4">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-yellow-300">
+                Stock sélectionné
+              </p>
+              <p className="mt-1 text-xl font-black uppercase text-white">
+                Véhicules premium
+              </p>
+            </div>
+
+            <div className="bg-yellow-300 px-4 py-3 text-black">
+              
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom info bar */}
+        <div className="mt-4 grid grid-cols-3 gap-3">
+          {[
+            "Historique vérifié",
+            "Import possible",
+            "Garantie optionnelle",
+          ].map((item) => (
+            <div
+              key={item}
+              className="border border-zinc-800 bg-black px-3 py-3 text-center"
+            >
+              <p className="text-[11px] font-black uppercase tracking-[0.12em] text-zinc-400">
+                {item}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {/* Bottom strip */}
+  <div className="absolute bottom-0 left-0 right-0 z-10 h-3 bg-yellow-300">
+    <div className="h-full w-64 bg-black skew-x-[-25deg]" />
+  </div>
+</section>
+
+      {/* STOCK */}
+      <section id="stock" className="px-5 md:px-6 py-16 md:py-20 bg-white text-black">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.22em] text-zinc-500">
+                Stock disponible
+              </p>
+              <h2 className={cn("mt-4", H2)}>Sélection du moment</h2>
+            </div>
+
+            <a
+              href="#contact"
+              className="bg-black text-white px-6 py-4 text-sm font-black uppercase no-underline hover:bg-yellow-300 hover:text-black transition"
+            >
+              Demander un sourcing
+            </a>
+          </div>
+
+          <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-5">
+            {vehicles.map((v, index) => (
               <button
                 key={v.stockId}
                 type="button"
-                className="text-white text-left bg-[#111113] rounded-2xl shadow-md overflow-hidden hover:shadow-lg hover:scale-[1.02] transition cursor-pointer border border-white/5"
                 onClick={() => setSelectedCar(v)}
+                className="group text-left bg-white border border-zinc-200 overflow-hidden transition hover:-translate-y-1 hover:border-yellow-300 hover:shadow-[0_20px_60px_rgba(0,0,0,0.12)]"
                 title="Voir le détail"
               >
-                <div className="relative">
+                <div className="relative h-56 bg-zinc-900 overflow-hidden">
                   <img
                     src={v.image}
                     alt={`${v.marque} ${v.modele}`}
-                    className="w-full h-48 object-cover"
+                    className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
                   />
-                  <div className="absolute text-black bottom-2 right-2 text-xs bg-white/70 px-2 py-1 rounded">
+
+                  <div className="absolute top-0 left-0 bg-yellow-300 text-black px-4 py-2 text-xs font-black uppercase tracking-wide">
+                    {v.stockId}
+                  </div>
+
+                  <div className="absolute bottom-3 right-3 bg-black text-white px-3 py-2 text-xs font-black">
                     {v.annee} • {v.km.toLocaleString("fr-LU")} km
                   </div>
                 </div>
 
-                <div className="p-5">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold">
-                      {v.marque} {v.modele}
-                      {v.finition ? ` ${v.finition}` : ""}
-                    </h3>
-                    <span className="text-sm text-gray-300">
-                      {formatPrice(v.price)}
-                    </span>
-                  </div>
-
-                  <p className="text-sm text-gray-400 mt-1">
-                    {v.boite} • {v.carburant} • {v.transmission}
+                <div className="p-6">
+                  <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">
+                    0{index + 1} / Véhicule sélectionné
                   </p>
+
+                  <h3 className={cn("mt-3", H3)}>
+                    {v.marque} {v.modele}
+                    {v.finition ? ` ${v.finition}` : ""}
+                  </h3>
+
+                  <div className="mt-5 flex items-center justify-between gap-4 border-t border-zinc-200 pt-4">
+                    <p className="text-sm text-zinc-600">
+                      {v.boite} • {v.carburant}
+                    </p>
+                    <p className="bg-yellow-300 px-3 py-2 text-sm font-black text-black">
+                      {formatPrice(v.price)}
+                    </p>
+                  </div>
                 </div>
               </button>
             ))}
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* Valeur / Process clés */}
-        <section className="mb-24">
-          <h2 className="text-3xl font-bold text-center mb-12">
-            Pourquoi SL Automotive ?
-          </h2>
+      {/* WHY */}
+      <section id="process" className="px-5 md:px-6 py-16 md:py-20 bg-[#0b0b0b] text-white">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-[0.85fr_1.15fr] gap-10 lg:gap-16 items-start">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-yellow-300">
+              Pourquoi SL Automotive ?
+            </p>
+            <h2 className={cn("mt-4", H2)}>
+              Une méthode claire pour acheter sans mauvaise surprise
+            </h2>
+            <p className={cn("mt-6 max-w-xl", BODY)}>
+              Chaque véhicule doit pouvoir être expliqué, documenté et justifié.
+              L’objectif est simple : éviter les achats flous, les frais cachés et
+              les mauvaises surprises après livraison.
+            </p>
+          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 max-w-5xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {[
               {
                 label: "Sélection",
                 text:
-                  "Véhicules de moins de 5 ans, fin de leasing, entretenus exclusivement en réseau constructeur avec historique complet.",
+                  "Véhicules récents, fin de leasing, historique complet et entretien constructeur.",
               },
               {
                 label: "Transparence",
                 text:
-                  "Carnet, factures, CT, photos détaillées et défauts signalés : un dossier clair, zéro surprise.",
+                  "Carnet, factures, CT, photos détaillées et défauts signalés avant décision.",
               },
               {
                 label: "Sérénité",
                 text:
-                  "Import depuis l’Allemagne ou le Luxembourg jusqu’à Dakar, test drive sur place et garantie optionnelle 1 à 2 ans.",
+                  "Accompagnement sourcing, import, test drive, dossier complet et garantie possible.",
               },
-            ].map(({ label, text }) => (
+            ].map(({ label, text }, index) => (
               <div
                 key={label}
-                className="bg-[#111113] rounded-xl shadow p-6 border border-white/5"
+                className="border border-zinc-800 bg-black p-6 transition hover:border-yellow-300"
               >
-                <h3 className="text-lg font-semibold mb-2">{label}</h3>
-                <p className="text-sm text-gray-300">{text}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Chiffres */}
-        <section className="mb-24">
-          <h2 className="text-3xl font-bold text-center mb-12">Nos chiffres</h2>
-
-          <div className="flex justify-center flex-wrap gap-8 max-w-5xl mx-auto">
-            {[
-              { label: "Véhicules inspectés", value: "+600" },
-              { label: "Points de contrôle", value: "150" },
-              { label: "Clients satisfaits", value: "100%" },
-            ].map(({ label, value }) => (
-              <div
-                key={label}
-                className="bg-[#111113] rounded-xl shadow p-6 w-64 text-center border border-white/5"
-              >
-                <h3 className="text-4xl font-bold text-yellow-400">{value}</h3>
-                <p className="text-sm text-white/80 mt-2">{label}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* CTA final */}
-        <section className="text-center mb-10">
-          <h2 className="text-3xl font-bold mb-6">Parlez-nous de votre projet.</h2>
-
-          <div className="flex items-center justify-center gap-4">
-            <a
-              className="bg-yellow-400 hover:bg-white text-black px-10 py-4 rounded-full shadow-lg font-medium no-underline transition hover:scale-105"
-              href="https://wa.me/35200000000?text=Bonjour%20SL%20Automotive%2C%20je%20souhaite%20obtenir%20le%20dossier%20d%E2%80%99un%20v%C3%A9hicule."
-              target="_blank"
-              rel="noreferrer"
-            >
-              Discuter sur WhatsApp
-            </a>
-
-            <a
-              className="border border-white/40 hover:bg-black hover:text-white bg-white text-black px-10 py-4 rounded-full shadow-lg font-medium no-underline transition hover:scale-105"
-              href="/contact"
-            >
-              Demander le dossier
-            </a>
-          </div>
-        </section>
-
-        {/* Footer */}
-        <footer className="text-center text-sm pt-8 border-t border-gray-700 text-gray-400">
-          <p className="mb-1">
-            © {new Date().getFullYear()} SL Automotive — Mentions légales — Politique
-            de confidentialité
-          </p>
-          <p className="text-[13px]">
-            La performance, sans compromis. La transparence, sans surprise.
-          </p>
-        </footer>
-
-        {/* MODAL DÉTAIL VÉHICULE */}
-        {selectedCar && (
-          <div
-            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
-            role="dialog"
-            aria-modal="true"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) setSelectedCar(null);
-            }}
-          >
-            <div className="w-full max-w-6xl max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl ring-1 ring-white/10 bg-[#111113] text-zinc-100">
-              {/* Header */}
-              <div className="sticky top-0 z-10 flex items-center justify-between px-6 md:px-8 py-4 border-b border-white/10 bg-[#111113]/95 backdrop-blur">
-                <div className="min-w-0">
-                  <h2 className="text-xl md:text-2xl font-semibold tracking-tight truncate">
-                    {selectedCar.marque} {selectedCar.modele} {selectedCar.finition || ""}
-                  </h2>
-                  <p className="text-xs text-zinc-400 mt-1">
-                    Stock {selectedCar.stockId} • {selectedCar.annee} •{" "}
-                    {selectedCar.km.toLocaleString("fr-LU")} km
-                  </p>
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-yellow-300 text-sm font-black text-black">
+                  0{index + 1}
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <span className="inline-flex items-center rounded-full px-3 py-1.5 text-sm font-medium bg-white/10 text-amber-300">
+                <h3 className="mt-5 text-base font-black uppercase tracking-[0.12em] text-white">
+                  {label}
+                </h3>
+
+                <p className="mt-4 text-sm leading-relaxed text-zinc-500">
+                  {text}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* NUMBERS */}
+      <section className="px-5 md:px-6 py-16 md:py-20 bg-white text-black">
+        <div className="max-w-7xl mx-auto">
+          <div className="bg-black text-white p-8 md:p-10">
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-yellow-300">
+              Nos chiffres
+            </p>
+
+            <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+              {[
+                { label: "Véhicules inspectés", value: "+600" },
+                { label: "Points de contrôle", value: "150" },
+                { label: "Clients satisfaits", value: "100%" },
+              ].map(({ label, value }) => (
+                <div key={label} className="border border-zinc-800 bg-zinc-950 p-6">
+                  <h3 className="text-5xl font-black text-yellow-300">{value}</h3>
+                  <p className="mt-3 text-sm font-black uppercase tracking-wide text-white">
+                    {label}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CONTACT */}
+      <section id="contact" className="px-5 md:px-6 py-20 bg-black text-white">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-[1fr_420px] gap-8">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-yellow-300">
+              Contact
+            </p>
+            <h2 className={cn("mt-4", H2)}>Parlez-nous de votre projet</h2>
+            <p className={cn("mt-6 max-w-2xl", LEAD)}>
+              Stock disponible, sourcing personnalisé, import ou dossier véhicule :
+              envoyez votre demande et nous revenons vers vous avec une réponse claire.
+            </p>
+
+            <div className="mt-10 flex flex-wrap gap-4">
+              <a
+                className="bg-yellow-300 text-black px-7 py-4 text-sm font-black uppercase no-underline hover:bg-white transition"
+                href="https://wa.me/35200000000?text=Bonjour%20SL%20Automotive%2C%20je%20souhaite%20obtenir%20le%20dossier%20d%E2%80%99un%20v%C3%A9hicule."
+                target="_blank"
+                rel="noreferrer"
+              >
+                Discuter sur WhatsApp
+              </a>
+
+              <a
+                className="bg-white text-black px-7 py-4 text-sm font-black uppercase no-underline hover:bg-yellow-300 transition"
+                href="/contact"
+              >
+                Demander le dossier
+              </a>
+            </div>
+          </div>
+
+          <div className="border border-zinc-800 bg-zinc-950 p-6">
+            <h3 className="text-2xl font-black uppercase text-yellow-300">
+              Demande rapide
+            </h3>
+
+            <div className="mt-6 space-y-4">
+              <input
+                className="w-full border border-zinc-700 bg-black px-4 py-3 text-sm text-white placeholder:text-zinc-500 outline-none focus:border-yellow-300"
+                placeholder="Nom complet"
+              />
+              <input
+                className="w-full border border-zinc-700 bg-black px-4 py-3 text-sm text-white placeholder:text-zinc-500 outline-none focus:border-yellow-300"
+                placeholder="Téléphone"
+              />
+              <textarea
+                className="min-h-[120px] w-full resize-none border border-zinc-700 bg-black px-4 py-3 text-sm text-white placeholder:text-zinc-500 outline-none focus:border-yellow-300"
+                placeholder="Modèle recherché, budget, pays, délai..."
+              />
+              <a
+                href="https://wa.me/35200000000?text=Bonjour%20SL%20Automotive%2C%20je%20souhaite%20faire%20une%20demande%20de%20sourcing."
+                target="_blank"
+                rel="noreferrer"
+                className="flex w-full justify-center bg-yellow-300 px-6 py-4 text-sm font-black uppercase text-black no-underline hover:bg-white transition"
+              >
+                Envoyer la demande
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* FOOTER */}
+      <footer className="px-5 md:px-6 py-8 bg-black border-t border-zinc-800 text-center text-sm text-zinc-500">
+        <p>
+          © {new Date().getFullYear()} SL Automotive — Mentions légales — Politique
+          de confidentialité
+        </p>
+        <p className="mt-2 text-xs">
+          La performance, sans compromis. La transparence, sans surprise.
+        </p>
+      </footer>
+
+      {/* MODAL DÉTAIL VÉHICULE */}
+      {selectedCar && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedCar(null);
+          }}
+        >
+          <div className="w-full max-w-6xl max-h-[90vh] overflow-y-auto border border-zinc-800 bg-black text-white shadow-2xl">
+            {/* Modal header */}
+            <div className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-zinc-800 bg-black/95 px-5 md:px-8 py-5 backdrop-blur">
+              <div className="min-w-0">
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-yellow-300">
+                  Stock {selectedCar.stockId}
+                </p>
+                <h2 className="mt-2 truncate text-2xl md:text-3xl font-black uppercase tracking-[-0.03em]">
+                  {selectedCar.marque} {selectedCar.modele} {selectedCar.finition || ""}
+                </h2>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className="hidden sm:inline-flex bg-yellow-300 px-4 py-2 text-sm font-black text-black">
+                  {formatPrice(selectedCar.price)}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedCar(null)}
+                  aria-label="Fermer"
+                  className="grid h-10 w-10 place-items-center border border-zinc-700 text-white hover:border-yellow-300 transition"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            {/* Image + Specs */}
+            <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1fr] gap-6 px-5 md:px-8 py-6 items-start">
+              <div className="relative bg-zinc-950 border border-zinc-800 p-3">
+                <div className="absolute left-3 top-3 z-10 bg-yellow-300 px-3 py-2 text-xs font-black text-black">
+                  {selectedCar.annee} • {selectedCar.km.toLocaleString("fr-LU")} km
+                </div>
+
+                <img
+                  src={selectedCar.image}
+                  alt={`${selectedCar.marque} ${selectedCar.modele}`}
+                  className="w-full h-[320px] md:h-[430px] object-cover"
+                />
+              </div>
+
+              <div>
+                <div className="bg-yellow-300 p-5 text-black">
+                  <p className="text-xs font-black uppercase tracking-[0.18em]">
+                    Prix affiché
+                  </p>
+                  <p className="mt-2 text-4xl font-black">
                     {formatPrice(selectedCar.price)}
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={() => setSelectedCar(null)}
-                    aria-label="Fermer"
-                    className="w-9 h-9 grid place-items-center rounded-full border border-white/10 hover:bg-white/10 transition"
-                  >
-                    ×
-                  </button>
-                </div>
-              </div>
-
-              {/* Image + Specs */}
-              <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1fr] gap-6 px-6 md:px-8 py-6 items-start">
-                {/* Image */}
-                <div className="relative">
-                  <img
-                    src={selectedCar.image}
-                    alt={`${selectedCar.marque} ${selectedCar.modele}`}
-                    className="w-full h-[320px] md:h-[400px] object-cover rounded-xl ring-1 ring-white/10 shadow-lg"
-                  />
-                  <div className="absolute -top-3 right-2 text-[11px] md:text-xs bg-white/10 backdrop-blur rounded-full px-3 py-1 ring-1 ring-white/20">
-                    {selectedCar.marque}
-                  </div>
-                </div>
-
-                {/* Specs */}
-                <div className="flex flex-col gap-3">
-                  <p className="text-xs uppercase tracking-widest text-zinc-400 mb-2">
-                    Détails
                   </p>
+                </div>
 
+                <div className="mt-4 grid grid-cols-1 gap-3">
                   {[
                     { label: "Boîte", value: selectedCar.boite },
                     { label: "Carburant", value: selectedCar.carburant },
@@ -471,79 +651,77 @@ export default function Dealer() {
                   ].map((it) => (
                     <div
                       key={it.label}
-                      className="flex items-center justify-between gap-3 rounded-xl bg-white/5 ring-1 ring-white/10 px-4 py-3"
+                      className="flex items-center justify-between gap-4 border border-zinc-800 bg-zinc-950 px-4 py-3"
                     >
-                      <span className="text-xs text-zinc-400 uppercase tracking-wider">
+                      <span className="text-xs font-black uppercase tracking-[0.16em] text-zinc-500">
                         {it.label}
                       </span>
-                      <span className="text-sm font-medium">{it.value}</span>
+                      <span className="text-sm font-bold text-white text-right">
+                        {it.value}
+                      </span>
                     </div>
                   ))}
-
-                  {/* Options */}
-                  {selectedCar.options.length > 0 && (
-                    <div className="mt-2">
-                      <p className="text-xs uppercase tracking-widest text-zinc-400 mb-2">
-                        Options
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {selectedCar.options.map((o, i) => (
-                          <span
-                            key={`${o}-${i}`}
-                            className="rounded-full bg-white/5 ring-1 ring-white/10 text-zinc-100 text-xs px-3 py-1.5"
-                          >
-                            {o}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Description */}
-              <div className="px-6 md:px-8 pb-6">
-                <details className="group rounded-xl bg-white/5 ring-1 ring-white/10">
-                  <summary className="flex items-center justify-between cursor-pointer select-none list-none px-4 py-3">
-                    <span className="text-sm font-medium">Voir plus d'information</span>
-                    <span className="transition-transform group-open:rotate-45 text-xl leading-none">
-                      +
-                    </span>
-                  </summary>
-                  <div className="px-4 pb-4 text-[15px] leading-6 text-zinc-200">
-                    <p>{selectedCar.description}</p>
-                  </div>
-                </details>
-
-                {/* CTA */}
-                <div className="mt-4 flex flex-wrap gap-3">
-                  <a
-                    className="inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-semibold bg-yellow-400 text-black hover:bg-white no-underline transition"
-                    href={`https://wa.me/35200000000?text=Bonjour%20SL%20Automotive%2C%20je%20suis%20int%C3%A9ress%C3%A9%20par%20le%20${encodeURIComponent(
-                      `${selectedCar.marque} ${selectedCar.modele}`
-                    )}%20(Stock%20${encodeURIComponent(
-                      selectedCar.stockId
-                    )}).%20Est-il%20disponible%20%3F`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    WhatsApp — Stock {selectedCar.stockId}
-                  </a>
-
-                  <a
-                    className="inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-semibold ring-1 ring-white/20 bg-white text-black hover:bg-black hover:text-white no-underline transition"
-                    href={`/contact?stock=${encodeURIComponent(selectedCar.stockId)}`}
-                  >
-                    Demander le dossier
-                  </a>
                 </div>
               </div>
             </div>
+
+            {/* Description + options */}
+            <div className="px-5 md:px-8 pb-8">
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_0.9fr] gap-6">
+                <div className="border border-zinc-800 bg-zinc-950 p-5">
+                  <p className="text-xs font-black uppercase tracking-[0.2em] text-yellow-300">
+                    Description
+                  </p>
+                  <p className="mt-4 text-sm leading-relaxed text-zinc-300">
+                    {selectedCar.description}
+                  </p>
+                </div>
+
+                {selectedCar.options.length > 0 && (
+                  <div className="border border-zinc-800 bg-zinc-950 p-5">
+                    <p className="text-xs font-black uppercase tracking-[0.2em] text-yellow-300">
+                      Options
+                    </p>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {selectedCar.options.map((o, i) => (
+                        <span
+                          key={`${o}-${i}`}
+                          className="bg-black border border-zinc-800 px-3 py-2 text-xs font-bold text-zinc-200"
+                        >
+                          {o}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-6 flex flex-wrap gap-3">
+                <a
+                  className="inline-flex items-center justify-center bg-yellow-300 px-6 py-3 text-sm font-black uppercase text-black hover:bg-white no-underline transition"
+                  href={`https://wa.me/35200000000?text=Bonjour%20SL%20Automotive%2C%20je%20suis%20int%C3%A9ress%C3%A9%20par%20le%20${encodeURIComponent(
+                    `${selectedCar.marque} ${selectedCar.modele}`
+                  )}%20(Stock%20${encodeURIComponent(
+                    selectedCar.stockId
+                  )}).%20Est-il%20disponible%20%3F`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  WhatsApp — Stock {selectedCar.stockId}
+                </a>
+
+                <a
+                  className="inline-flex items-center justify-center bg-white px-6 py-3 text-sm font-black uppercase text-black hover:bg-yellow-300 no-underline transition"
+                  href={`/contact?stock=${encodeURIComponent(selectedCar.stockId)}`}
+                >
+                  Demander le dossier
+                </a>
+              </div>
+            </div>
           </div>
-        )}
-      </div>
-      </div>
+        </div>
+      )}
     </main>
   );
 }
-

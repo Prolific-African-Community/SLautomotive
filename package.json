@@ -9,7 +9,10 @@
     "@emotion/react": "latest",
     "@emotion/styled": "latest",
     "@mui/material": "latest",
+    "@prisma/client": "^5.22.0",
+    "cheerio": "^1.2.0",
     "next": "latest",
+    "playwright": "^1.59.1",
     "react": "latest",
     "react-dom": "latest"
   },
@@ -20,6 +23,7 @@
     "postcss": "latest",
     "prettier": "latest",
     "prettier-plugin-tailwindcss": "latest",
+    "prisma": "^5.22.0",
     "tailwindcss": "latest",
     "typescript": "latest"
   }
