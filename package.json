@@ -25,6 +25,6 @@
     "prettier-plugin-tailwindcss": "latest",
     "prisma": "^4.16.2",
     "tailwindcss": "latest",
-    "typescript": "latest"
+    "typescript": "^4.9.5"
   }
 }
