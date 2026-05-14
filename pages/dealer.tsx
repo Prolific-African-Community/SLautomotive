@@ -145,9 +145,7 @@ export default function Dealer() {
 
           <div className="hidden lg:flex items-center gap-8 text-xs font-black uppercase tracking-[0.18em]">
             
-            <a href="/dealer" className="text-yellow-300 no-underline">
-              Véhicules disponibles
-            </a>
+            
             <a href="/" className="text-white no-underline hover:text-yellow-300">
               Garage
             </a>
@@ -172,7 +170,7 @@ export default function Dealer() {
           <button
             type="button"
             onClick={() => setMenuOpen((v) => !v)}
-            className="lg:hidden inline-flex items-center justify-center border border-zinc-700 p-2 text-white hover:border-yellow-300 transition"
+            className="lg:hidden inline-flex items-center justify-center bg-black border border-none p-2 text-white hover:border-yellow-300 transition"
             aria-label="Ouvrir le menu"
           >
             <svg
@@ -195,14 +193,12 @@ export default function Dealer() {
           <div className="lg:hidden bg-black border-t border-zinc-800">
             <div className="px-6 py-6 flex flex-col gap-5 text-sm font-black uppercase tracking-wide">
               {[
-                { label: "L'Académie", href: "/academy" },
-                { label: "Formations", href: "/formations" },
-                { label: "Investisseurs", href: "/investor" },
-                { label: "Infrastructure", href: "/infrastructure" },
-                { label: "Dealer", href: "/dealer" },
-                { label: "Garage", href: "/garage" },
+                
+                
+                { label: "Garage", href: "/" },
                 { label: "Stock", href: "#stock" },
                 { label: "Process", href: "#process" },
+                { label: "Sourcing", href: "/dashboard/sourcing" },
               ].map(({ label, href }) => (
                 <a
                   key={label}

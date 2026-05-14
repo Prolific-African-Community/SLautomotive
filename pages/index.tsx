@@ -124,7 +124,7 @@ export default function GaragePage() {
           <button
             type="button"
             onClick={() => setMenuOpen((v) => !v)}
-            className="lg:hidden inline-flex items-center justify-center border border-zinc-700 p-2 text-white hover:border-yellow-300 transition"
+            className="lg:hidden inline-flex bg-black items-center justify-center border border-none p-2 text-white hover:border-yellow-300 transition"
             aria-label="Ouvrir le menu"
           >
             <svg
@@ -147,12 +147,8 @@ export default function GaragePage() {
           <div className="lg:hidden bg-black border-t border-zinc-800">
             <div className="px-6 py-6 flex flex-col gap-5 text-sm font-black uppercase tracking-wide">
               {[
-                { label: "L'Académie", href: "/academy" },
-                { label: "Formations", href: "/formations" },
-                { label: "Investisseurs", href: "/investor" },
-                { label: "Infrastructure", href: "/infrastructure" },
+                
                 { label: "Dealer", href: "/dealer" },
-                { label: "Garage", href: "/garage" },
                 { label: "Services", href: "#services" },
                 { label: "Prix", href: "#prix" },
               ].map(({ label, href }) => (
