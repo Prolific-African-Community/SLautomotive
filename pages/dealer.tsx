@@ -302,7 +302,7 @@ export default function Dealer() {
 
         <div className="relative aspect-[4/3] overflow-hidden bg-black">
           <img
-            src="/Hero-sl3.png"
+            src="/hero-sl3.png"
             alt="SL Automotive — véhicules premium"
             className="h-full w-full object-cover object-center"
           />
