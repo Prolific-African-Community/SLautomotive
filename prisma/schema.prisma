@@ -98,6 +98,80 @@ model VehicleAnalysis {
   updatedAt DateTime @updatedAt
 }
 
+model GarageRequest {
+  id String @id @default(cuid())
+
+  firstName String?
+  lastName  String?
+  email     String?
+  phone     String?
+
+  vehicleBrand String?
+  vehicleModel String?
+  vehicleYear  Int?
+  mileage      Int?
+  plateNumber  String?
+
+  problemType String?
+  symptoms    String[]
+  description String?
+
+  preferredContactMethod String?
+  preferredDate          DateTime?
+
+  status   GarageRequestStatus   @default(NEW)
+  priority GarageRequestPriority @default(NORMAL)
+  source   String?               @default("website")
+
+  quoteTotal Float?
+  quoteNote  String?
+
+  mechanicNotes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  interventions GarageInterventionLine[]
+}
+
+model InterventionCode {
+  id String @id @default(cuid())
+
+  code             String  @unique
+  label            String
+  category         String
+  description      String?
+  unitPrice        Float
+  defaultQty       Float   @default(1)
+  estimatedMinutes Int?
+  isActive         Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines GarageInterventionLine[]
+}
+
+model GarageInterventionLine {
+  id String @id @default(cuid())
+
+  garageRequestId    String
+  interventionCodeId String?
+
+  code      String?
+  label     String
+  category  String?
+  qty       Float   @default(1)
+  unitPrice Float
+  total     Float
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  garageRequest    GarageRequest     @relation(fields: [garageRequestId], references: [id], onDelete: Cascade)
+  interventionCode InterventionCode? @relation(fields: [interventionCodeId], references: [id])
+}
+
 enum VehicleInternalStatus {
   NEW
   TO_REVIEW
@@ -108,4 +182,22 @@ enum VehicleInternalStatus {
   REJECTED
   EXPIRED
   PUBLISHED
+}
+
+enum GarageRequestStatus {
+  NEW
+  IN_REVIEW
+  WAITING_CLIENT
+  QUOTE_READY
+  QUOTE_SENT
+  ACCEPTED
+  REJECTED
+  DONE
+}
+
+enum GarageRequestPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
 }

@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { buildGarageClientRequestWhatsappUrl } from "../lib/garage-whatsapp";
+import type { GarageWhatsappRequestLike } from "../lib/garage-whatsapp";
 
 /* ------------------ Utils ------------------ */
 type ClassValue = string | false | null | undefined;
@@ -56,23 +58,148 @@ const priceRows = [
   ["Contrôle freinage", "à partir de 29 €"],
 ];
 
+type PublicGaragePayload = GarageWhatsappRequestLike & {
+  preferredContactMethod?: string;
+  preferredDate?: string | null;
+  priority: "NORMAL";
+  source: "website";
+};
+
+type ApiResponse<T> = {
+  success: boolean;
+  data?: T;
+  message?: string;
+};
+
+function toNullableNumber(value: string) {
+  if (!value.trim()) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+async function postJson<T>(url: string, payload: unknown): Promise<ApiResponse<T>> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+
+  if (!res.ok || !json.success) {
+    throw new Error(json.message || `Erreur API ${res.status}`);
+  }
+
+  return json;
+}
+
 export default function GaragePage() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [step, setStep] = useState(1);
   const [intervention, setIntervention] = useState<string | null>(null);
+  const [vehicle, setVehicle] = useState({
+    vehicleBrand: "",
+    vehicleModel: "",
+    vehicleYear: "",
+    mileage: "",
+    plateNumber: "",
+  });
+  const [symptoms, setSymptoms] = useState<string[]>([]);
+  const [description, setDescription] = useState("");
   const [client, setClient] = useState({
     firstName: "",
     lastName: "",
     email: "",
     phone: "",
   });
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [createdRequest, setCreatedRequest] =
+    useState<GarageWhatsappRequestLike | null>(null);
 
   const goToAssistant = () => {
     setStep(1);
+    setCreatedRequest(null);
+    setSubmitError(null);
     const el = document.getElementById("prise-en-charge");
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   };
+
+  function updateVehicle<K extends keyof typeof vehicle>(
+    key: K,
+    value: (typeof vehicle)[K]
+  ) {
+    setVehicle((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function toggleSymptom(symptom: string) {
+    setSymptoms((prev) =>
+      prev.includes(symptom)
+        ? prev.filter((item) => item !== symptom)
+        : [...prev, symptom]
+    );
+  }
+
+  function resetPublicRequest() {
+    setStep(1);
+    setIntervention(null);
+    setVehicle({
+      vehicleBrand: "",
+      vehicleModel: "",
+      vehicleYear: "",
+      mileage: "",
+      plateNumber: "",
+    });
+    setSymptoms([]);
+    setDescription("");
+    setClient({
+      firstName: "",
+      lastName: "",
+      email: "",
+      phone: "",
+    });
+    setSubmitError(null);
+    setCreatedRequest(null);
+  }
+
+  async function submitGarageRequest() {
+    try {
+      setSubmitting(true);
+      setSubmitError(null);
+
+      const payload: PublicGaragePayload = {
+        firstName: client.firstName.trim(),
+        lastName: client.lastName.trim(),
+        email: client.email.trim(),
+        phone: client.phone.trim(),
+        vehicleBrand: vehicle.vehicleBrand.trim(),
+        vehicleModel: vehicle.vehicleModel.trim(),
+        vehicleYear: toNullableNumber(vehicle.vehicleYear),
+        mileage: toNullableNumber(vehicle.mileage),
+        plateNumber: vehicle.plateNumber.trim(),
+        problemType: intervention || "Diagnostic",
+        symptoms,
+        description: description.trim(),
+        preferredContactMethod: "phone",
+        preferredDate: null,
+        priority: "NORMAL",
+        source: "website",
+      };
+
+      const json = await postJson<GarageWhatsappRequestLike>(
+        "/api/garage/requests",
+        payload
+      );
+
+      setCreatedRequest(json.data || payload);
+    } catch (err: any) {
+      setSubmitError(err?.message || "Impossible d'envoyer la demande.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -373,16 +500,78 @@ export default function GaragePage() {
                 <div className="h-full w-40 bg-black skew-x-[-25deg]" />
               </div>
 
-              {step === 1 && (
+              {createdRequest ? (
+                <div className="space-y-6 pt-5">
+                  <div className="border border-yellow-300/40 bg-yellow-300 p-6 text-black">
+                    <p className="text-xs font-black uppercase tracking-[0.22em] text-black/60">
+                      Demande enregistrée
+                    </p>
+                    <h3 className="mt-3 text-3xl font-black uppercase tracking-[-0.03em]">
+                      Votre diagnostic a été transmis à SL Automotive.
+                    </h3>
+                    <p className="mt-4 text-sm font-semibold leading-relaxed text-black/70">
+                      Vous pouvez aussi envoyer le résumé directement par WhatsApp
+                      pour accélérer la prise en charge.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <a
+                      href={buildGarageClientRequestWhatsappUrl(createdRequest)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center justify-center bg-yellow-300 px-6 py-4 text-center text-sm font-black uppercase text-black no-underline transition hover:bg-white"
+                    >
+                      Envoyer aussi sur WhatsApp
+                    </a>
+                    <button
+                      type="button"
+                      onClick={resetPublicRequest}
+                      className="border border-zinc-700 bg-transparent px-6 py-4 text-sm font-black uppercase text-white transition hover:border-white"
+                    >
+                      Nouvelle demande
+                    </button>
+                  </div>
+                </div>
+              ) : step === 1 && (
                 <div className="space-y-6 pt-4">
                   <h3 className={H3}>Votre véhicule</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <input className={inputClass} placeholder="Marque" />
-                    <input className={inputClass} placeholder="Modèle" />
-                    <input className={inputClass} placeholder="Année" />
-                    <input className={inputClass} placeholder="Kilométrage" />
+                    <input
+                      className={inputClass}
+                      placeholder="Marque"
+                      value={vehicle.vehicleBrand}
+                      onChange={(e) => updateVehicle("vehicleBrand", e.target.value)}
+                    />
+                    <input
+                      className={inputClass}
+                      placeholder="Modèle"
+                      value={vehicle.vehicleModel}
+                      onChange={(e) => updateVehicle("vehicleModel", e.target.value)}
+                    />
+                    <input
+                      className={inputClass}
+                      placeholder="Année"
+                      inputMode="numeric"
+                      value={vehicle.vehicleYear}
+                      onChange={(e) => updateVehicle("vehicleYear", e.target.value)}
+                    />
+                    <input
+                      className={inputClass}
+                      placeholder="Kilométrage"
+                      inputMode="numeric"
+                      value={vehicle.mileage}
+                      onChange={(e) => updateVehicle("mileage", e.target.value)}
+                    />
+                    <input
+                      className={cn(inputClass, "md:col-span-2")}
+                      placeholder="Plaque d'immatriculation"
+                      value={vehicle.plateNumber}
+                      onChange={(e) => updateVehicle("plateNumber", e.target.value)}
+                    />
                   </div>
                   <button
+                    type="button"
                     onClick={() => setStep(2)}
                     className="bg-yellow-300 text-black px-6 py-3 text-sm font-black uppercase border-0 hover:bg-white transition"
                   >
@@ -391,7 +580,7 @@ export default function GaragePage() {
                 </div>
               )}
 
-              {step === 2 && (
+              {!createdRequest && step === 2 && (
                 <div className="space-y-6 pt-4">
                   <h3 className={H3}>Type d’intervention</h3>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -419,12 +608,14 @@ export default function GaragePage() {
 
                   <div className="flex items-center justify-between gap-4">
                     <button
+                      type="button"
                       onClick={() => setStep(1)}
                       className="bg-transparent text-white px-6 py-3 text-sm font-black uppercase border border-zinc-700 hover:border-white transition"
                     >
                       Précédent
                     </button>
                     <button
+                      type="button"
                       onClick={() => setStep(3)}
                       className="bg-yellow-300 text-black px-6 py-3 text-sm font-black uppercase border-0 hover:bg-white transition"
                     >
@@ -434,7 +625,7 @@ export default function GaragePage() {
                 </div>
               )}
 
-              {step === 3 && (
+              {!createdRequest && step === 3 && (
                 <div className="space-y-6 pt-4">
                   <h3 className={H3}>Symptômes observés</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -450,20 +641,33 @@ export default function GaragePage() {
                         key={item}
                         className="flex items-center gap-3 border border-zinc-800 bg-zinc-950 p-4 text-sm font-semibold"
                       >
-                        <input type="checkbox" className="accent-yellow-300" />
+                        <input
+                          type="checkbox"
+                          className="accent-yellow-300"
+                          checked={symptoms.includes(item)}
+                          onChange={() => toggleSymptom(item)}
+                        />
                         <span>{item}</span>
                       </label>
                     ))}
                   </div>
+                  <textarea
+                    className={cn(inputClass, "min-h-[120px] resize-none")}
+                    placeholder="Décrivez le problème en quelques mots"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                  />
 
                   <div className="flex items-center justify-between gap-4">
                     <button
+                      type="button"
                       onClick={() => setStep(2)}
                       className="bg-transparent text-white px-6 py-3 text-sm font-black uppercase border border-zinc-700 hover:border-white transition"
                     >
                       Précédent
                     </button>
                     <button
+                      type="button"
                       onClick={() => setStep(4)}
                       className="bg-yellow-300 text-black px-6 py-3 text-sm font-black uppercase border-0 hover:bg-white transition"
                     >
@@ -473,7 +677,7 @@ export default function GaragePage() {
                 </div>
               )}
 
-              {step === 4 && (
+              {!createdRequest && step === 4 && (
                 <div className="space-y-6 pt-4">
                   <h3 className={H3}>Vos coordonnées</h3>
                   <p className={BODY}>
@@ -518,15 +722,27 @@ export default function GaragePage() {
                     />
                   </div>
 
+                  {submitError && (
+                    <div className="border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-100">
+                      {submitError}
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-between gap-4">
                     <button
+                      type="button"
                       onClick={() => setStep(3)}
                       className="bg-transparent text-white px-6 py-3 text-sm font-black uppercase border border-zinc-700 hover:border-white transition"
                     >
                       Précédent
                     </button>
-                    <button className="bg-yellow-300 text-black px-6 py-3 text-sm font-black uppercase border-0 hover:bg-white transition">
-                      Envoyer la demande
+                    <button
+                      type="button"
+                      onClick={submitGarageRequest}
+                      disabled={submitting}
+                      className="bg-yellow-300 text-black px-6 py-3 text-sm font-black uppercase border-0 hover:bg-white transition disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {submitting ? "Envoi..." : "Envoyer la demande"}
                     </button>
                   </div>
                 </div>
@@ -806,7 +1022,7 @@ export default function GaragePage() {
             <div className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl">
               <div className="border border-zinc-800 p-5">
                 <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">Téléphone</p>
-                <p className="mt-2 font-black text-yellow-300">+352 691 280 494</p>
+                <p className="mt-2 font-black text-yellow-300">+33 6 21 02 56 31</p>
               </div>
               <div className="border border-zinc-800 p-5">
                 <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">Adresse</p>
