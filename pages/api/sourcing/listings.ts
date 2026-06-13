@@ -157,6 +157,7 @@ export default async function handler(
         include: {
           analysis: true,
           sourcingRule: true,
+          dealerVehicle: true,
         },
         orderBy: {
           createdAt: "desc",
@@ -329,6 +330,7 @@ export default async function handler(
         include: {
           analysis: true,
           sourcingRule: true,
+          dealerVehicle: true,
         },
       });
 

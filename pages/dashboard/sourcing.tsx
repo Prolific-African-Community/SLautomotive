@@ -35,6 +35,12 @@ type Listing = {
     priorityScore?: number | null;
     isFavorite?: boolean;
   } | null;
+  dealerVehicle?: {
+    id: string;
+    stockReference: string;
+    status: string;
+    price?: number | null;
+  } | null;
 };
 
 type ApiResponse = {
@@ -514,6 +520,7 @@ export default function SourcingDashboard() {
   const [runningRuleId, setRunningRuleId] = useState<string | null>(null);
   const [cleaningRuleId, setCleaningRuleId] = useState<string | null>(null);
   const [ruleActionMessage, setRuleActionMessage] = useState<string | null>(null);
+  const [publishingDealerId, setPublishingDealerId] = useState<string | null>(null);
 
   function updateForm<K extends keyof NewListingForm>(key: K, value: NewListingForm[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -839,6 +846,65 @@ async function deleteListing(id: string) {
   }
 }
 
+async function publishListingToDealer(listing: Listing) {
+  if (!listing.analysis?.expectedSalePrice || listing.analysis.expectedSalePrice <= 0) {
+    setError("Ajoute un prix de revente cible avant de publier sur Dealer.");
+    return;
+  }
+
+  try {
+    setPublishingDealerId(listing.id);
+    setError(null);
+    setRuleActionMessage(null);
+
+    const json = await fetchJson<{
+      success: boolean;
+      data?: any;
+      message?: string;
+    }>(`/api/sourcing/listings/${listing.id}/publish-dealer`, {
+      method: "POST",
+    });
+
+    if (!json.success) {
+      throw new Error(json.message || "Publication Dealer impossible.");
+    }
+
+    setRuleActionMessage("Véhicule publié sur Dealer.");
+    await loadListings();
+  } catch (err: any) {
+    setError(err?.message || "Publication Dealer impossible.");
+  } finally {
+    setPublishingDealerId(null);
+  }
+}
+
+async function unpublishListingFromDealer(listing: Listing) {
+  try {
+    setPublishingDealerId(listing.id);
+    setError(null);
+    setRuleActionMessage(null);
+
+    const json = await fetchJson<{
+      success: boolean;
+      data?: any;
+      message?: string;
+    }>(`/api/sourcing/listings/${listing.id}/unpublish-dealer`, {
+      method: "POST",
+    });
+
+    if (!json.success) {
+      throw new Error(json.message || "Retrait Dealer impossible.");
+    }
+
+    setRuleActionMessage("Véhicule retiré du Dealer.");
+    await loadListings();
+  } catch (err: any) {
+    setError(err?.message || "Retrait Dealer impossible.");
+  } finally {
+    setPublishingDealerId(null);
+  }
+}
+
 function openEditForm(listing: Listing) {
   setEditError(null);
 
@@ -1019,6 +1085,10 @@ async function createListing(e: FormEvent) {
 
   function renderListingCard(listing: Listing, compact = false) {
     const analysis = listing.analysis;
+    const dealerVehicleAvailable = listing.dealerVehicle?.status === "AVAILABLE";
+    const canPublishDealer = Boolean(
+      analysis?.expectedSalePrice && analysis.expectedSalePrice > 0
+    );
 
     const totalCost =
       (listing.price || 0) +
@@ -1063,6 +1133,12 @@ async function createListing(e: FormEvent) {
                   {analysis?.isFavorite && (
                     <span className="inline-flex rounded-full border border-yellow-300/30 bg-yellow-300/10 px-2.5 py-1 text-[10px] font-bold uppercase text-yellow-300">
                       Favori
+                    </span>
+                  )}
+
+                  {dealerVehicleAvailable && (
+                    <span className="inline-flex rounded-full border border-emerald-300/30 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-bold uppercase text-emerald-200">
+                      Dealer {listing.dealerVehicle?.stockReference}
                     </span>
                   )}
                 </div>
@@ -1190,6 +1266,32 @@ async function createListing(e: FormEvent) {
                   <IconReject />
                 </span>
               </button>
+
+              {dealerVehicleAvailable ? (
+                <button
+                  type="button"
+                  onClick={() => unpublishListingFromDealer(listing)}
+                  title="Retirer du Dealer"
+                  disabled={publishingDealerId === listing.id}
+                  className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-semibold uppercase text-zinc-200 transition hover:border-yellow-300/50 hover:text-yellow-200 disabled:opacity-50"
+                >
+                  {publishingDealerId === listing.id ? "Retrait..." : "Retirer Dealer"}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => publishListingToDealer(listing)}
+                  title={
+                    canPublishDealer
+                      ? "Publier sur véhicules disponibles"
+                      : "Ajoute un prix de revente cible avant de publier sur Dealer."
+                  }
+                  disabled={!canPublishDealer || publishingDealerId === listing.id}
+                  className="rounded-2xl border border-yellow-300/60 bg-yellow-300 px-3 py-2 text-xs font-semibold uppercase text-black transition hover:bg-white disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.04] disabled:text-zinc-500"
+                >
+                  {publishingDealerId === listing.id ? "Publication..." : "Lister sur Dealer"}
+                </button>
+              )}
 
               <button
                 type="button"
@@ -2219,6 +2321,10 @@ async function createListing(e: FormEvent) {
                 type="number"
                 className={inputClass}
               />
+
+              <div className="rounded-xl border border-yellow-300/30 bg-yellow-300/10 px-4 py-3 text-xs font-semibold leading-relaxed text-yellow-700 md:col-span-3">
+                Le prix de revente cible sera utilisé comme prix public sur la page Dealer.
+              </div>
 
               <input
                 value={editingListing.repairCostEstimate}

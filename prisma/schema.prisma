@@ -64,7 +64,8 @@ model VehicleListing {
   sourcingRuleId String?
   sourcingRule   SourcingRule? @relation(fields: [sourcingRuleId], references: [id])
 
-  analysis VehicleAnalysis?
+  analysis      VehicleAnalysis?
+  dealerVehicle DealerVehicle?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -134,6 +135,47 @@ model GarageRequest {
   interventions GarageInterventionLine[]
 }
 
+model DealerVehicle {
+  id String @id @default(cuid())
+
+  sourcingListingId String? @unique
+
+  stockReference String @unique
+
+  sourceUrl String?
+  source    String?
+
+  brand   String
+  model   String
+  version String?
+  title   String?
+
+  year     Int?
+  mileage  Int?
+  price    Float?
+  currency String @default("EUR")
+
+  fuel         String?
+  transmission String?
+  power        String?
+  location     String?
+  country      String?
+  imageUrl     String?
+
+  description String?
+  dealerNotes String?
+
+  status DealerVehicleStatus @default(AVAILABLE)
+
+  isFeatured Boolean @default(false)
+  sortOrder  Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sourcingListing VehicleListing? @relation(fields: [sourcingListingId], references: [id], onDelete: SetNull)
+}
+
 model InterventionCode {
   id String @id @default(cuid())
 
@@ -182,6 +224,14 @@ enum VehicleInternalStatus {
   REJECTED
   EXPIRED
   PUBLISHED
+}
+
+enum DealerVehicleStatus {
+  DRAFT
+  AVAILABLE
+  RESERVED
+  SOLD
+  HIDDEN
 }
 
 enum GarageRequestStatus {

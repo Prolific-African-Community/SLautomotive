@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 
 /* ------------------ Utils ------------------ */
 type ClassValue = string | false | null | undefined;
@@ -27,6 +27,25 @@ type Vehicle = {
   couleur?: string;
 };
 
+type DealerVehicleApi = {
+  id: string;
+  stockReference: string;
+  brand: string;
+  model: string;
+  version?: string | null;
+  title?: string | null;
+  year?: number | null;
+  mileage?: number | null;
+  price?: number | null;
+  currency: string;
+  fuel?: string | null;
+  transmission?: string | null;
+  power?: string | null;
+  country?: string | null;
+  imageUrl?: string | null;
+  description?: string | null;
+};
+
 /* ------------------ Design tokens ------------------ */
 const H1 =
   "text-5xl md:text-7xl font-black uppercase tracking-[-0.045em] leading-[0.95]";
@@ -41,6 +60,9 @@ export default function Dealer() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [selectedCar, setSelectedCar] = useState<Vehicle | null>(null);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [loadingVehicles, setLoadingVehicles] = useState(true);
+  const [vehiclesError, setVehiclesError] = useState<string | null>(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -49,71 +71,53 @@ export default function Dealer() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const vehicles: Vehicle[] = useMemo(
-    () => [
-      {
-        stockId: "SLA-0001",
-        marque: "Audi",
-        modele: "S5 Sportback",
-        finition: "Quattro",
-        annee: 2019,
-        km: 62000,
-        price: 38900,
-        image: "/audi-s5.jpg",
-        boite: "Automatique",
-        carburant: "Essence",
-        puissance: "354 ch (260 kW)",
-        transmission: "Quattro",
-        provenance: "DE",
-        entretien: "Concession Audi",
-        vinMasked: "WAUZZZ…1234",
-        options: ["Matrix LED", "Virtual Cockpit", "Sièges sport chauffants", "Toit pano"],
-        description:
-          "Fin de leasing 🇩🇪, historique constructeur complet, contrôle 150 points. Dossier transparent et prêt à être transmis.",
-      },
-      {
-        stockId: "SLA-0002",
-        marque: "BMW",
-        modele: "330i",
-        finition: "M Sport",
-        annee: 2020,
-        km: 48000,
-        price: 32900,
-        image: "/bmw-330i.jpg",
-        boite: "Automatique",
-        carburant: "Essence",
-        puissance: "258 ch (190 kW)",
-        transmission: "Propulsion",
-        provenance: "LU",
-        entretien: "BMW Luxembourg",
-        vinMasked: "WBA…5678",
-        options: ["Driving Assistant", "Live Cockpit Pro", "Shadowline", "Harman/Kardon"],
-        description:
-          "Première main, suivi constructeur, fin de leasing. Rapport d’état détaillé disponible sur demande.",
-      },
-      {
-        stockId: "SLA-0003",
-        marque: "Mercedes-Benz",
-        modele: "C220d",
-        finition: "AMG Line",
-        annee: 2018,
-        km: 89000,
-        price: null,
-        image: "/mb-c220d.jpg",
-        boite: "Manuelle",
-        carburant: "Diesel",
-        puissance: "170 ch (125 kW)",
-        transmission: "Propulsion",
-        provenance: "DE",
-        entretien: "Mercedes-Benz",
-        vinMasked: "WDD…9012",
-        options: ["LED High Performance", "COMAND", "Pack Stationnement", "Keyless-Go"],
-        description:
-          "Réservée. Dossier complet, CT à jour, transparence totale. Contacte-nous pour la prochaine dispo.",
-      },
-    ],
-    []
-  );
+  useEffect(() => {
+    async function loadDealerVehicles() {
+      try {
+        setLoadingVehicles(true);
+        setVehiclesError(null);
+
+        const res = await fetch("/api/dealer/vehicles");
+        const json = await res.json();
+
+        if (!res.ok || !json.success) {
+          throw new Error(json.message || "Impossible de charger les véhicules.");
+        }
+
+        setVehicles((json.data || []).map(mapDealerVehicle));
+      } catch (err: any) {
+        setVehiclesError(err?.message || "Impossible de charger les véhicules.");
+      } finally {
+        setLoadingVehicles(false);
+      }
+    }
+
+    loadDealerVehicles();
+  }, []);
+
+  function mapDealerVehicle(vehicle: DealerVehicleApi): Vehicle {
+    return {
+      stockId: vehicle.stockReference,
+      marque: vehicle.brand,
+      modele: vehicle.model,
+      finition: vehicle.version || undefined,
+      annee: vehicle.year || 0,
+      km: vehicle.mileage || 0,
+      price: vehicle.price ?? null,
+      image: vehicle.imageUrl || "",
+      boite: vehicle.transmission || "—",
+      carburant: vehicle.fuel || "—",
+      puissance: vehicle.power || "—",
+      transmission: vehicle.transmission || "—",
+      provenance: vehicle.country || "—",
+      entretien: "Historique sur demande",
+      vinMasked: "Disponible sur demande",
+      options: ["Dossier disponible", "Contrôle avant livraison"],
+      description:
+        vehicle.description ||
+        "Véhicule sélectionné par SL Automotive. Dossier complet disponible sur demande.",
+    };
+  }
 
   const formatPrice = (n: number | null) =>
     n != null
@@ -371,53 +375,96 @@ export default function Dealer() {
             </a>
           </div>
 
-          <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-5">
-            {vehicles.map((v, index) => (
-              <button
-                key={v.stockId}
-                type="button"
-                onClick={() => setSelectedCar(v)}
-                className="group text-left bg-white border border-zinc-200 overflow-hidden transition hover:-translate-y-1 hover:border-yellow-300 hover:shadow-[0_20px_60px_rgba(0,0,0,0.12)]"
-                title="Voir le détail"
+          {loadingVehicles && (
+            <div className="mt-12 border border-zinc-200 bg-zinc-50 p-8 text-sm font-semibold text-zinc-600">
+              Chargement des véhicules disponibles...
+            </div>
+          )}
+
+          {!loadingVehicles && vehiclesError && (
+            <div className="mt-12 border border-red-200 bg-red-50 p-8 text-sm font-semibold text-red-700">
+              {vehiclesError}
+            </div>
+          )}
+
+          {!loadingVehicles && !vehiclesError && vehicles.length === 0 && (
+            <div className="mt-12 grid gap-6 border border-zinc-200 bg-black p-8 text-white md:grid-cols-[1fr_auto] md:items-center">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.22em] text-yellow-300">
+                  Stock en préparation
+                </p>
+                <h3 className="mt-3 text-2xl font-black uppercase">
+                  Aucun véhicule disponible pour le moment.
+                </h3>
+                <p className="mt-3 max-w-2xl text-sm leading-relaxed text-zinc-400">
+                  Demandez un sourcing personnalisé, nous recherchons le véhicule
+                  adapté à votre besoin.
+                </p>
+              </div>
+              <a
+                href="#contact"
+                className="inline-flex justify-center bg-yellow-300 px-6 py-4 text-sm font-black uppercase text-black no-underline transition hover:bg-white"
               >
-                <div className="relative h-56 bg-zinc-900 overflow-hidden">
-                  <img
-                    src={v.image}
-                    alt={`${v.marque} ${v.modele}`}
-                    className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-                  />
+                Demander un sourcing
+              </a>
+            </div>
+          )}
 
-                  <div className="absolute top-0 left-0 bg-yellow-300 text-black px-4 py-2 text-xs font-black uppercase tracking-wide">
-                    {v.stockId}
+          {!loadingVehicles && !vehiclesError && vehicles.length > 0 && (
+            <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-5">
+              {vehicles.map((v, index) => (
+                <button
+                  key={v.stockId}
+                  type="button"
+                  onClick={() => setSelectedCar(v)}
+                  className="group text-left bg-white border border-zinc-200 overflow-hidden transition hover:-translate-y-1 hover:border-yellow-300 hover:shadow-[0_20px_60px_rgba(0,0,0,0.12)]"
+                  title="Voir le détail"
+                >
+                  <div className="relative h-56 bg-zinc-900 overflow-hidden">
+                    {v.image ? (
+                      <img
+                        src={v.image}
+                        alt={`${v.marque} ${v.modele}`}
+                        className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center bg-black text-xs font-black uppercase tracking-[0.18em] text-yellow-300">
+                        Image à venir
+                      </div>
+                    )}
+
+                    <div className="absolute top-0 left-0 bg-yellow-300 text-black px-4 py-2 text-xs font-black uppercase tracking-wide">
+                      {v.stockId}
+                    </div>
+
+                    <div className="absolute bottom-3 right-3 bg-black text-white px-3 py-2 text-xs font-black">
+                      {v.annee || "—"} • {v.km.toLocaleString("fr-LU")} km
+                    </div>
                   </div>
 
-                  <div className="absolute bottom-3 right-3 bg-black text-white px-3 py-2 text-xs font-black">
-                    {v.annee} • {v.km.toLocaleString("fr-LU")} km
-                  </div>
-                </div>
-
-                <div className="p-6">
-                  <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">
-                    0{index + 1} / Véhicule sélectionné
-                  </p>
-
-                  <h3 className={cn("mt-3", H3)}>
-                    {v.marque} {v.modele}
-                    {v.finition ? ` ${v.finition}` : ""}
-                  </h3>
-
-                  <div className="mt-5 flex items-center justify-between gap-4 border-t border-zinc-200 pt-4">
-                    <p className="text-sm text-zinc-600">
-                      {v.boite} • {v.carburant}
+                  <div className="p-6">
+                    <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">
+                      0{index + 1} / Véhicule sélectionné
                     </p>
-                    <p className="bg-yellow-300 px-3 py-2 text-sm font-black text-black">
-                      {formatPrice(v.price)}
-                    </p>
+
+                    <h3 className={cn("mt-3", H3)}>
+                      {v.marque} {v.modele}
+                      {v.finition ? ` ${v.finition}` : ""}
+                    </h3>
+
+                    <div className="mt-5 flex items-center justify-between gap-4 border-t border-zinc-200 pt-4">
+                      <p className="text-sm text-zinc-600">
+                        {v.boite} • {v.carburant}
+                      </p>
+                      <p className="bg-yellow-300 px-3 py-2 text-sm font-black text-black">
+                        {formatPrice(v.price)}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              </button>
-            ))}
-          </div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
@@ -519,7 +566,7 @@ export default function Dealer() {
             <div className="mt-10 flex flex-wrap gap-4">
               <a
                 className="bg-yellow-300 text-black px-7 py-4 text-sm font-black uppercase no-underline hover:bg-white transition"
-                href="https://wa.me/35200000000?text=Bonjour%20SL%20Automotive%2C%20je%20souhaite%20obtenir%20le%20dossier%20d%E2%80%99un%20v%C3%A9hicule."
+                href="https://wa.me/33621025631?text=Bonjour%20SL%20Automotive%2C%20je%20souhaite%20obtenir%20le%20dossier%20d%E2%80%99un%20v%C3%A9hicule."
                 target="_blank"
                 rel="noreferrer"
               >
@@ -554,7 +601,7 @@ export default function Dealer() {
                 placeholder="Modèle recherché, budget, pays, délai..."
               />
               <a
-                href="https://wa.me/35200000000?text=Bonjour%20SL%20Automotive%2C%20je%20souhaite%20faire%20une%20demande%20de%20sourcing."
+                href="https://wa.me/33621025631?text=Bonjour%20SL%20Automotive%2C%20je%20souhaite%20faire%20une%20demande%20de%20sourcing."
                 target="_blank"
                 rel="noreferrer"
                 className="flex w-full justify-center bg-yellow-300 px-6 py-4 text-sm font-black uppercase text-black no-underline hover:bg-white transition"
@@ -622,11 +669,17 @@ export default function Dealer() {
                   {selectedCar.annee} • {selectedCar.km.toLocaleString("fr-LU")} km
                 </div>
 
-                <img
-                  src={selectedCar.image}
-                  alt={`${selectedCar.marque} ${selectedCar.modele}`}
-                  className="w-full h-[320px] md:h-[430px] object-cover"
-                />
+                {selectedCar.image ? (
+                  <img
+                    src={selectedCar.image}
+                    alt={`${selectedCar.marque} ${selectedCar.modele}`}
+                    className="w-full h-[320px] md:h-[430px] object-cover"
+                  />
+                ) : (
+                  <div className="flex h-[320px] w-full items-center justify-center bg-black text-sm font-black uppercase tracking-[0.18em] text-yellow-300 md:h-[430px]">
+                    Image à venir
+                  </div>
+                )}
               </div>
 
               <div>
@@ -699,7 +752,7 @@ export default function Dealer() {
               <div className="mt-6 flex flex-wrap gap-3">
                 <a
                   className="inline-flex items-center justify-center bg-yellow-300 px-6 py-3 text-sm font-black uppercase text-black hover:bg-white no-underline transition"
-                  href={`https://wa.me/35200000000?text=Bonjour%20SL%20Automotive%2C%20je%20suis%20int%C3%A9ress%C3%A9%20par%20le%20${encodeURIComponent(
+                  href={`https://wa.me/33621025631?text=Bonjour%20SL%20Automotive%2C%20je%20suis%20int%C3%A9ress%C3%A9%20par%20le%20${encodeURIComponent(
                     `${selectedCar.marque} ${selectedCar.modele}`
                   )}%20(Stock%20${encodeURIComponent(
                     selectedCar.stockId

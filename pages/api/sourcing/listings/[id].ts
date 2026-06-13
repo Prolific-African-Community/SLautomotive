@@ -73,7 +73,7 @@ export default async function handler(
     try {
       const existing = await prisma.vehicleListing.findUnique({
         where: { id },
-        include: { analysis: true },
+        include: { analysis: true, dealerVehicle: true },
       });
 
       if (!existing) {
@@ -270,6 +270,7 @@ export default async function handler(
         include: {
           analysis: true,
           sourcingRule: true,
+          dealerVehicle: true,
         },
       });
 
