@@ -68,6 +68,7 @@ export default async function handler(
         },
         select: {
           status: true,
+          invoicePdfUrl: true,
         },
       });
 
@@ -79,8 +80,12 @@ export default async function handler(
       }
 
       const isSendQuote = req.body?.action === "send_quote";
+      const isSendInvoice = req.body?.action === "send_invoice";
       const quoteAmount = isSendQuote
         ? parseNumber(req.body?.quoteAmount)
+        : null;
+      const invoiceAmount = isSendInvoice
+        ? parseNumber(req.body?.invoiceAmount)
         : null;
       const canSendQuote = new Set<ExternalMaintenanceStatus>([
         ExternalMaintenanceStatus.UNDER_REVIEW,
@@ -102,7 +107,43 @@ export default async function handler(
         });
       }
 
-      const patch = isSendQuote
+      const canSendInvoice = new Set<ExternalMaintenanceStatus>([
+        ExternalMaintenanceStatus.COMPLETED,
+        ExternalMaintenanceStatus.IN_PROGRESS,
+        ExternalMaintenanceStatus.QUOTE_APPROVED,
+        ExternalMaintenanceStatus.SCHEDULED,
+        ExternalMaintenanceStatus.INVOICED,
+      ]).has(existing.status);
+
+      if (
+        isSendInvoice &&
+        (invoiceAmount === null ||
+          invoiceAmount === undefined ||
+          invoiceAmount < 0 ||
+          !canSendInvoice)
+      ) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "A valid invoice amount and an eligible maintenance status are required.",
+        });
+      }
+
+      const patch = isSendInvoice
+        ? {
+            data: {
+              invoiceAmount: invoiceAmount as number,
+              invoicePdfUrl:
+                typeof req.body?.invoicePdfUrl === "undefined"
+                  ? undefined
+                  : parseString(req.body.invoicePdfUrl) ?? null,
+            },
+            status: ExternalMaintenanceStatus.INVOICED,
+            statusComment:
+              parseString(req.body?.statusComment) ??
+              "Invoice sent to NovoTralux.",
+          }
+        : isSendQuote
         ? {
             data: {
               quoteAmount: quoteAmount as number,
@@ -151,7 +192,7 @@ export default async function handler(
         });
       });
 
-      if (patch.status && patch.status !== existing.status) {
+      if (patch.status && (patch.status !== existing.status || isSendInvoice)) {
         await sendNovoTraluxMaintenanceStatusWebhook(
           request,
           patch.statusComment

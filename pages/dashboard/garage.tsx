@@ -120,6 +120,12 @@ type QuoteDraft = {
   comment: string;
 };
 
+type InvoiceDraft = {
+  amount: string;
+  pdfUrl: string;
+  comment: string;
+};
+
 type ApiResponse<T> = {
   success: boolean;
   data?: T;
@@ -327,6 +333,7 @@ export default function GarageDashboard() {
   const [seeding, setSeeding] = useState(false);
   const [externalActionId, setExternalActionId] = useState<string | null>(null);
   const [quoteDrafts, setQuoteDrafts] = useState<Record<string, QuoteDraft>>({});
+  const [invoiceDrafts, setInvoiceDrafts] = useState<Record<string, InvoiceDraft>>({});
   const [showForm, setShowForm] = useState(false);
   const [showCodeForm, setShowCodeForm] = useState(false);
   const [form, setForm] = useState<RequestForm>(EMPTY_FORM);
@@ -607,6 +614,55 @@ export default function GarageDashboard() {
       await loadExternalRequests();
     } catch (err: any) {
       setError(err?.message || "Envoi du devis impossible.");
+    } finally {
+      setExternalActionId(null);
+    }
+  }
+
+  function updateInvoiceDraft(id: string, field: keyof InvoiceDraft, value: string) {
+    setInvoiceDrafts((current) => ({
+      ...current,
+      [id]: {
+        amount: current[id]?.amount ?? "",
+        pdfUrl: current[id]?.pdfUrl ?? "",
+        comment: current[id]?.comment ?? "",
+        [field]: value,
+      },
+    }));
+  }
+
+  async function sendExternalInvoice(request: ExternalMaintenanceRequest) {
+    const draft = invoiceDrafts[request.id];
+    const invoiceAmount = Number(draft?.amount);
+
+    if (!draft?.amount.trim() || !Number.isFinite(invoiceAmount) || invoiceAmount < 0) {
+      setError("Le montant de la facture est obligatoire et doit être valide.");
+      return;
+    }
+
+    try {
+      setExternalActionId(request.id);
+      setError(null);
+      setMessage(null);
+      await fetchJson<ExternalMaintenanceRequest>(`/api/garage/external-maintenance/${request.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "send_invoice",
+          invoiceAmount,
+          invoicePdfUrl: draft.pdfUrl.trim() || null,
+          statusComment: draft.comment.trim() || null,
+        }),
+      });
+      setMessage("Facture envoyée à NovoTralux.");
+      setInvoiceDrafts((current) => {
+        const next = { ...current };
+        delete next[request.id];
+        return next;
+      });
+      await loadExternalRequests();
+    } catch (err: any) {
+      setError(err?.message || "Envoi de la facture impossible.");
     } finally {
       setExternalActionId(null);
     }
@@ -1116,6 +1172,22 @@ export default function GarageDashboard() {
                         </div>
                       ) : null}
 
+                      {request.invoiceAmount !== null && request.invoiceAmount !== undefined ? (
+                        <div className="mt-4 rounded-2xl border border-emerald-300/20 bg-emerald-300/5 p-4 text-sm">
+                          <p className="font-bold text-emerald-100">Facture : {formatMoney(request.invoiceAmount)}</p>
+                          {request.invoicePdfUrl ? (
+                            <a
+                              href={request.invoicePdfUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-2 inline-block text-emerald-300 underline"
+                            >
+                              Ouvrir la facture
+                            </a>
+                          ) : null}
+                        </div>
+                      ) : null}
+
                       {["UNDER_REVIEW", "QUOTE_PREPARING", "SCHEDULED"].includes(request.status) ? (
                         <div className="mt-4 grid gap-3 rounded-2xl border border-white/10 bg-black/20 p-4">
                           <div className="grid gap-3 sm:grid-cols-2">
@@ -1148,6 +1220,48 @@ export default function GarageDashboard() {
                             disabled={externalActionId === request.id}
                           >
                             {externalActionId === request.id ? "Envoi en cours..." : "Envoyer devis"}
+                          </button>
+                        </div>
+                      ) : null}
+
+                      {["COMPLETED", "IN_PROGRESS", "QUOTE_APPROVED", "SCHEDULED", "INVOICED"].includes(
+                        request.status
+                      ) ? (
+                        <div className="mt-4 grid gap-3 rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <input
+                              className={inputClass}
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              placeholder="Montant de la facture (€)"
+                              value={invoiceDrafts[request.id]?.amount ?? ""}
+                              onChange={(event) => updateInvoiceDraft(request.id, "amount", event.target.value)}
+                            />
+                            <input
+                              className={inputClass}
+                              type="url"
+                              placeholder="URL de la facture (optionnel)"
+                              value={invoiceDrafts[request.id]?.pdfUrl ?? ""}
+                              onChange={(event) => updateInvoiceDraft(request.id, "pdfUrl", event.target.value)}
+                            />
+                          </div>
+                          <input
+                            className={inputClass}
+                            placeholder="Commentaire (optionnel)"
+                            value={invoiceDrafts[request.id]?.comment ?? ""}
+                            onChange={(event) => updateInvoiceDraft(request.id, "comment", event.target.value)}
+                          />
+                          <button
+                            className={buttonClass}
+                            onClick={() => void sendExternalInvoice(request)}
+                            disabled={externalActionId === request.id}
+                          >
+                            {externalActionId === request.id
+                              ? "Envoi en cours..."
+                              : request.status === "INVOICED"
+                              ? "Mettre à jour la facture"
+                              : "Envoyer facture"}
                           </button>
                         </div>
                       ) : null}
