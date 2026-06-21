@@ -7,8 +7,27 @@ import {
   parseString,
   serializeError,
 } from "../../../../lib/garage";
-import { buildExternalMaintenancePatchData } from "../../../../lib/external-maintenance";
+import {
+  buildExternalMaintenancePatchData,
+  requireGarageApiAuth,
+} from "../../../../lib/external-maintenance";
+import { generateExternalMaintenanceInvoicePdf } from "../../../../lib/external-maintenance-invoice";
 import { sendNovoTraluxMaintenanceStatusWebhook } from "../../../../lib/novotralux-maintenance-webhook";
+
+function getRequestOriginFallback(req: NextApiRequest) {
+  const forwardedProtoHeader = req.headers["x-forwarded-proto"];
+  const forwardedProto = Array.isArray(forwardedProtoHeader)
+    ? forwardedProtoHeader[0]
+    : forwardedProtoHeader;
+  const protocol = forwardedProto || "http";
+  const host = req.headers.host;
+
+  if (!host || typeof host !== "string") {
+    return null;
+  }
+
+  return `${protocol}://${host}`;
+}
 
 export default async function handler(
   req: NextApiRequest,
@@ -24,6 +43,14 @@ export default async function handler(
   }
 
   if (req.method === "GET") {
+    const auth = requireGarageApiAuth(req, res);
+    if (!auth.ok) {
+      return res.status(auth.status).json({
+        success: false,
+        message: auth.message,
+      });
+    }
+
     try {
       const request = await prisma.externalMaintenanceRequest.findUnique({
         where: {
@@ -61,14 +88,41 @@ export default async function handler(
   }
 
   if (req.method === "PATCH") {
+    const auth = requireGarageApiAuth(req, res);
+    if (!auth.ok) {
+      return res.status(auth.status).json({
+        success: false,
+        message: auth.message,
+      });
+    }
+
     try {
       const existing = await prisma.externalMaintenanceRequest.findUnique({
         where: {
           id,
         },
         select: {
+          id: true,
           status: true,
+          sourceCompany: true,
+          sourceSystem: true,
+          externalRequestId: true,
+          externalVehicleId: true,
+          vehicleType: true,
+          plateNumber: true,
+          interventionType: true,
+          urgency: true,
+          mileage: true,
+          immobilizationRequired: true,
+          preferredDate: true,
+          issueDescription: true,
+          internalNotes: true,
+          quoteAmount: true,
+          quotePdfUrl: true,
+          invoiceAmount: true,
           invoicePdfUrl: true,
+          createdAt: true,
+          updatedAt: true,
         },
       });
 
@@ -129,19 +183,43 @@ export default async function handler(
         });
       }
 
+      const manualInvoicePdfUrl = isSendInvoice
+        ? parseString(req.body?.invoicePdfUrl)
+        : null;
+      const invoiceStatusComment = isSendInvoice
+        ? parseString(req.body?.statusComment) ?? "Invoice sent to NovoTralux."
+        : null;
+      const shouldReuseExistingInvoicePdf =
+        isSendInvoice &&
+        existing.status === ExternalMaintenanceStatus.INVOICED &&
+        existing.invoicePdfUrl &&
+        existing.invoiceAmount === invoiceAmount &&
+        !manualInvoicePdfUrl;
+
+      let resolvedInvoicePdfUrl: string | null = manualInvoicePdfUrl ?? null;
+
+      if (isSendInvoice && !resolvedInvoicePdfUrl && shouldReuseExistingInvoicePdf) {
+        resolvedInvoicePdfUrl = existing.invoicePdfUrl;
+      }
+
+      if (isSendInvoice && !resolvedInvoicePdfUrl) {
+        const generatedInvoice = await generateExternalMaintenanceInvoicePdf(
+          getRequestOriginFallback(req),
+          existing,
+          invoiceAmount as number,
+          invoiceStatusComment
+        );
+        resolvedInvoicePdfUrl = generatedInvoice.absoluteUrl;
+      }
+
       const patch = isSendInvoice
         ? {
             data: {
               invoiceAmount: invoiceAmount as number,
-              invoicePdfUrl:
-                typeof req.body?.invoicePdfUrl === "undefined"
-                  ? undefined
-                  : parseString(req.body.invoicePdfUrl) ?? null,
+              invoicePdfUrl: resolvedInvoicePdfUrl,
             },
             status: ExternalMaintenanceStatus.INVOICED,
-            statusComment:
-              parseString(req.body?.statusComment) ??
-              "Invoice sent to NovoTralux.",
+            statusComment: invoiceStatusComment,
           }
         : isSendQuote
         ? {

@@ -1,6 +1,7 @@
 import { ExternalMaintenanceWebhookDeliveryStatus } from "@prisma/client";
 import type { NextApiRequest, NextApiResponse } from "next";
 
+import { requireGarageApiAuth } from "../../../../../../lib/external-maintenance";
 import {
   retryNovoTraluxMaintenanceWebhookDelivery,
   WebhookDeliveryRetryError,
@@ -15,6 +16,14 @@ export default async function handler(
     return res
       .status(405)
       .json({ success: false, message: "Method not allowed." });
+  }
+
+  const auth = requireGarageApiAuth(req, res);
+  if (!auth.ok) {
+    return res.status(auth.status).json({
+      success: false,
+      message: auth.message,
+    });
   }
 
   const deliveryId = typeof req.query.id === "string" ? req.query.id : null;

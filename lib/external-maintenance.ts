@@ -7,7 +7,7 @@ import {
   PrismaClient,
 } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
-import type { NextApiRequest } from "next";
+import type { NextApiRequest, NextApiResponse } from "next";
 import { parseDate, parseNumber, parseString } from "./garage";
 import { prisma as defaultPrisma } from "./prisma";
 
@@ -136,6 +136,72 @@ export function verifyNovoTraluxApiKey(req: NextApiRequest) {
 
   return {
     ok: true as const,
+  };
+}
+
+function extractRequestHost(req: NextApiRequest) {
+  const hostHeader = req.headers.host;
+  return typeof hostHeader === "string" ? hostHeader.toLowerCase() : null;
+}
+
+function extractHeaderHost(value: string | undefined) {
+  if (!value) return null;
+
+  try {
+    return new URL(value).host.toLowerCase();
+  } catch (error) {
+    return null;
+  }
+}
+
+function isSameOriginBrowserRequest(req: NextApiRequest) {
+  const requestHost = extractRequestHost(req);
+  if (!requestHost) return false;
+
+  const secFetchSite = req.headers["sec-fetch-site"];
+  const fetchSite =
+    typeof secFetchSite === "string" ? secFetchSite.toLowerCase() : null;
+  const originHost = extractHeaderHost(
+    typeof req.headers.origin === "string" ? req.headers.origin : undefined
+  );
+  const refererHost = extractHeaderHost(
+    typeof req.headers.referer === "string" ? req.headers.referer : undefined
+  );
+
+  const sameOriginHeader =
+    (originHost && originHost === requestHost) ||
+    (refererHost && refererHost === requestHost);
+
+  const sameSiteFetch =
+    fetchSite === "same-origin" || fetchSite === "same-site" || fetchSite === "none";
+
+  return Boolean(sameOriginHeader || sameSiteFetch);
+}
+
+export function requireGarageApiAuth(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  const internalApiKey = process.env.SL_GARAGE_INTERNAL_API_KEY?.trim();
+  const requestApiKey = req.headers["x-internal-api-key"];
+
+  if (
+    internalApiKey &&
+    typeof requestApiKey === "string" &&
+    requestApiKey === internalApiKey
+  ) {
+    return { ok: true as const, mode: "api-key" as const };
+  }
+
+  if (isSameOriginBrowserRequest(req)) {
+    return { ok: true as const, mode: "same-origin" as const };
+  }
+
+  return {
+    ok: false as const,
+    status: 401,
+    message:
+      "Unauthorized. Use the SL dashboard from the same origin or provide x-internal-api-key.",
   };
 }
 

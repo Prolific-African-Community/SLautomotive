@@ -683,7 +683,11 @@ export default function GarageDashboard() {
           statusComment: draft.comment.trim() || null,
         }),
       });
-      setMessage("Facture envoyée à NovoTralux.");
+      setMessage(
+        draft?.pdfUrl.trim()
+          ? "Facture envoyée à NovoTralux."
+          : "Facture envoyée à NovoTralux. PDF SL genere automatiquement."
+      );
       setInvoiceDrafts((current) => {
         const next = { ...current };
         delete next[request.id];
@@ -1276,6 +1280,10 @@ export default function GarageDashboard() {
                         request.status
                       ) ? (
                         <div className="mt-4 grid gap-3 rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <p className="text-xs text-zinc-400">
+                            L&apos;URL de facture est optionnelle. Si elle est vide, SL Automotive
+                            genere automatiquement le PDF.
+                          </p>
                           <div className="grid gap-3 sm:grid-cols-2">
                             <input
                               className={inputClass}
@@ -1289,7 +1297,7 @@ export default function GarageDashboard() {
                             <input
                               className={inputClass}
                               type="url"
-                              placeholder="URL de la facture (optionnel)"
+                              placeholder="URL de la facture (optionnel, sinon generation automatique)"
                               value={invoiceDrafts[request.id]?.pdfUrl ?? ""}
                               onChange={(event) => updateInvoiceDraft(request.id, "pdfUrl", event.target.value)}
                             />

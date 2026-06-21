@@ -5,6 +5,7 @@ import { ApiResponse, serializeError } from "../../../../lib/garage";
 import {
   findExistingExternalMaintenanceRequest,
   normalizeExternalMaintenancePayload,
+  requireGarageApiAuth,
   validateExternalMaintenanceCreateData,
   verifyNovoTraluxApiKey,
 } from "../../../../lib/external-maintenance";
@@ -14,6 +15,14 @@ export default async function handler(
   res: NextApiResponse<ApiResponse>
 ) {
   if (req.method === "GET") {
+    const auth = requireGarageApiAuth(req, res);
+    if (!auth.ok) {
+      return res.status(auth.status).json({
+        success: false,
+        message: auth.message,
+      });
+    }
+
     try {
       const requests = await prisma.externalMaintenanceRequest.findMany({
         orderBy: [{ urgency: "desc" }, { createdAt: "desc" }],
