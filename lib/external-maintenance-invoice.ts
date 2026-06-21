@@ -4,11 +4,11 @@ import { put } from "@vercel/blob";
 import PDFDocument from "pdfkit";
 import type { ExternalMaintenanceRequest } from "@prisma/client";
 
-const GENERATED_INVOICE_DIR = path.join(
+const GENERATED_FEES_DIR = path.join(
   process.cwd(),
   "public",
   "generated",
-  "invoices"
+  "fees"
 );
 
 export type ExternalMaintenanceInvoiceRequestData = Pick<
@@ -76,7 +76,7 @@ export function resolveSlAutomotivePublicBaseUrl(
 function buildInvoiceReference(request: ExternalMaintenanceInvoiceRequestData) {
   const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, "");
   const shortId = request.id.slice(-6).toUpperCase();
-  return `SLA-INV-${datePart}-${shortId}`;
+  return `SLA-FEES-${datePart}-${shortId}`;
 }
 
 function writeLine(
@@ -104,12 +104,12 @@ export async function renderExternalMaintenanceInvoicePdfBuffer(
   request: ExternalMaintenanceInvoiceRequestData,
   invoiceAmount: number,
   statusComment?: string | null
-) : Promise<RenderedExternalMaintenanceInvoicePdf> {
+): Promise<RenderedExternalMaintenanceInvoicePdf> {
   const invoiceReference = buildInvoiceReference(request);
   const fileName = `${invoiceReference}-${slugify(
     request.plateNumber || request.externalRequestId || request.id
   )}.pdf`;
-  const publicPath = `/generated/invoices/${fileName}`;
+  const publicPath = `/generated/fees/${fileName}`;
   const invoiceDate = new Date();
 
   const buffer = await new Promise<Buffer>((resolve, reject) => {
@@ -140,24 +140,21 @@ export async function renderExternalMaintenanceInvoicePdfBuffer(
       .moveDown(0.4)
       .font("Helvetica-Bold")
       .fontSize(18)
-      .text("Facture intervention");
+      .text("Frais d'intervention");
 
     doc.moveDown(1);
 
-    writeLine(doc, "Reference facture : ", invoiceReference, { boldValue: true });
+    writeLine(doc, "Référence frais : ", invoiceReference, { boldValue: true });
     writeLine(doc, "Date : ", formatDate(invoiceDate));
     writeLine(doc, "Client : ", "NovoTralux");
-    writeLine(doc, "Plaque vehicule : ", request.plateNumber || "-");
-    writeLine(doc, "Type vehicule : ", request.vehicleType);
-    writeLine(doc, "Type intervention : ", request.interventionType);
+    writeLine(doc, "Plaque véhicule : ", request.plateNumber || "-");
+    writeLine(doc, "Type véhicule : ", request.vehicleType);
+    writeLine(doc, "Type d'intervention : ", request.interventionType);
     writeLine(doc, "SL request id : ", request.id);
     writeLine(doc, "NovoTralux request id : ", request.externalRequestId);
 
     doc.moveDown(0.6);
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(11)
-      .text("Signalement");
+    doc.font("Helvetica-Bold").fontSize(11).text("Signalement");
     doc
       .moveDown(0.3)
       .font("Helvetica")
@@ -168,10 +165,7 @@ export async function renderExternalMaintenanceInvoicePdfBuffer(
 
     doc.moveDown(1);
 
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(11)
-      .text("Montant final facture");
+    doc.font("Helvetica-Bold").fontSize(11).text("Montant des frais acceptés");
     doc
       .moveDown(0.3)
       .font("Helvetica-Bold")
@@ -197,7 +191,7 @@ export async function renderExternalMaintenanceInvoicePdfBuffer(
       .fontSize(9)
       .fillColor("#555555")
       .text(
-        "Document genere automatiquement par SL Automotive pour transmission au partenaire NovoTralux."
+        "Document des frais généré automatiquement par SL Automotive après acceptation par NovoTralux."
       );
 
     doc.end();
@@ -216,27 +210,34 @@ export async function storeExternalMaintenanceInvoicePdf(
   renderedInvoice: RenderedExternalMaintenanceInvoicePdf
 ) {
   if (process.env.BLOB_READ_WRITE_TOKEN?.trim()) {
-    const blob = await put(
-      `external-maintenance/invoices/${renderedInvoice.fileName}`,
-      renderedInvoice.buffer,
-      {
-        access: "public",
-        addRandomSuffix: false,
-        contentType: "application/pdf",
-      }
-    );
+    try {
+      const blob = await put(
+        `external-maintenance/fees/${renderedInvoice.fileName}`,
+        renderedInvoice.buffer,
+        {
+          access: "public",
+          addRandomSuffix: false,
+          contentType: "application/pdf",
+        }
+      );
 
-    return {
-      storage: "blob" as const,
-      fileName: renderedInvoice.fileName,
-      invoiceReference: renderedInvoice.invoiceReference,
-      publicPath: renderedInvoice.publicPath,
-      absoluteUrl: blob.url,
-    };
+      return {
+        storage: "blob" as const,
+        fileName: renderedInvoice.fileName,
+        invoiceReference: renderedInvoice.invoiceReference,
+        publicPath: renderedInvoice.publicPath,
+        absoluteUrl: blob.url,
+      };
+    } catch (error) {
+      console.warn(
+        "Public Vercel Blob storage failed; using the local fees PDF fallback.",
+        error
+      );
+    }
   }
 
-  await fs.mkdir(GENERATED_INVOICE_DIR, { recursive: true });
-  const filePath = path.join(GENERATED_INVOICE_DIR, renderedInvoice.fileName);
+  await fs.mkdir(GENERATED_FEES_DIR, { recursive: true });
+  const filePath = path.join(GENERATED_FEES_DIR, renderedInvoice.fileName);
   await fs.writeFile(filePath, renderedInvoice.buffer);
 
   return {
@@ -245,9 +246,9 @@ export async function storeExternalMaintenanceInvoicePdf(
     filePath,
     invoiceReference: renderedInvoice.invoiceReference,
     publicPath: renderedInvoice.publicPath,
-    absoluteUrl: `${resolveSlAutomotivePublicBaseUrl(
-      requestOriginFallback
-    )}${renderedInvoice.publicPath}`,
+    absoluteUrl: `${resolveSlAutomotivePublicBaseUrl(requestOriginFallback)}${
+      renderedInvoice.publicPath
+    }`,
   };
 }
 
@@ -272,3 +273,6 @@ export async function generateExternalMaintenanceInvoicePdf(
     ...storedInvoice,
   };
 }
+
+export const generateExternalMaintenanceFeesPdf =
+  generateExternalMaintenanceInvoicePdf;

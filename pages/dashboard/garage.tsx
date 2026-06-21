@@ -126,13 +126,6 @@ type CodeForm = {
 
 type QuoteDraft = {
   amount: string;
-  pdfUrl: string;
-  comment: string;
-};
-
-type InvoiceDraft = {
-  amount: string;
-  pdfUrl: string;
   comment: string;
 };
 
@@ -241,8 +234,8 @@ function statusLabel(status: string) {
     NEW: "Nouveau",
     IN_REVIEW: "En analyse",
     WAITING_CLIENT: "Attente client",
-    QUOTE_READY: "Devis prêt",
-    QUOTE_SENT: "Devis envoyé",
+    QUOTE_READY: "Frais prêts",
+    QUOTE_SENT: "Frais proposés",
     ACCEPTED: "Accepté",
     REJECTED: "Refusé",
     DONE: "Terminé",
@@ -296,7 +289,9 @@ function externalStatusClass(status: string) {
     status === "SCHEDULED" ||
     status === "IN_PROGRESS" ||
     status === "COMPLETED" ||
-    status === "INVOICED"
+    status === "INVOICED" ||
+    status === "PAID" ||
+    status === "CLOSED"
   ) {
     return "bg-emerald-400 text-black";
   }
@@ -343,7 +338,7 @@ export default function GarageDashboard() {
   const [seeding, setSeeding] = useState(false);
   const [externalActionId, setExternalActionId] = useState<string | null>(null);
   const [quoteDrafts, setQuoteDrafts] = useState<Record<string, QuoteDraft>>({});
-  const [invoiceDrafts, setInvoiceDrafts] = useState<Record<string, InvoiceDraft>>({});
+  const [selectedExternalRequestId, setSelectedExternalRequestId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showCodeForm, setShowCodeForm] = useState(false);
   const [form, setForm] = useState<RequestForm>(EMPTY_FORM);
@@ -604,7 +599,6 @@ export default function GarageDashboard() {
       ...current,
       [id]: {
         amount: current[id]?.amount ?? "",
-        pdfUrl: current[id]?.pdfUrl ?? "",
         comment: current[id]?.comment ?? "",
         [field]: value,
       },
@@ -616,7 +610,7 @@ export default function GarageDashboard() {
     const quoteAmount = Number(draft?.amount);
 
     if (!draft?.amount.trim() || !Number.isFinite(quoteAmount) || quoteAmount < 0) {
-      setError("Le montant du devis est obligatoire et doit être valide.");
+      setError("Le montant des frais est obligatoire et doit être valide.");
       return;
     }
 
@@ -630,11 +624,10 @@ export default function GarageDashboard() {
         body: JSON.stringify({
           action: "send_quote",
           quoteAmount,
-          quotePdfUrl: draft.pdfUrl.trim() || null,
           statusComment: draft.comment.trim() || null,
         }),
       });
-      setMessage("Devis envoyé à NovoTralux.");
+      setMessage("Frais proposés à NovoTralux.");
       setQuoteDrafts((current) => {
         const next = { ...current };
         delete next[request.id];
@@ -642,60 +635,7 @@ export default function GarageDashboard() {
       });
       await loadExternalRequests();
     } catch (err: any) {
-      setError(err?.message || "Envoi du devis impossible.");
-    } finally {
-      setExternalActionId(null);
-    }
-  }
-
-  function updateInvoiceDraft(id: string, field: keyof InvoiceDraft, value: string) {
-    setInvoiceDrafts((current) => ({
-      ...current,
-      [id]: {
-        amount: current[id]?.amount ?? "",
-        pdfUrl: current[id]?.pdfUrl ?? "",
-        comment: current[id]?.comment ?? "",
-        [field]: value,
-      },
-    }));
-  }
-
-  async function sendExternalInvoice(request: ExternalMaintenanceRequest) {
-    const draft = invoiceDrafts[request.id];
-    const invoiceAmount = Number(draft?.amount);
-
-    if (!draft?.amount.trim() || !Number.isFinite(invoiceAmount) || invoiceAmount < 0) {
-      setError("Le montant de la facture est obligatoire et doit être valide.");
-      return;
-    }
-
-    try {
-      setExternalActionId(request.id);
-      setError(null);
-      setMessage(null);
-      await fetchJson<ExternalMaintenanceRequest>(`/api/garage/external-maintenance/${request.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "send_invoice",
-          invoiceAmount,
-          invoicePdfUrl: draft.pdfUrl.trim() || null,
-          statusComment: draft.comment.trim() || null,
-        }),
-      });
-      setMessage(
-        draft?.pdfUrl.trim()
-          ? "Facture envoyée à NovoTralux."
-          : "Facture envoyée à NovoTralux. PDF SL genere automatiquement."
-      );
-      setInvoiceDrafts((current) => {
-        const next = { ...current };
-        delete next[request.id];
-        return next;
-      });
-      await loadExternalRequests();
-    } catch (err: any) {
-      setError(err?.message || "Envoi de la facture impossible.");
+      setError(err?.message || "Proposition des frais impossible.");
     } finally {
       setExternalActionId(null);
     }
@@ -820,8 +760,8 @@ export default function GarageDashboard() {
       { label: "Total demandes", value: requests.length.toString() },
       { label: "Nouvelles", value: count("NEW").toString() },
       { label: "En analyse", value: count("IN_REVIEW").toString() },
-      { label: "Devis prêts", value: count("QUOTE_READY").toString() },
-      { label: "Devis envoyés", value: count("QUOTE_SENT").toString() },
+      { label: "Frais prêts", value: count("QUOTE_READY").toString() },
+      { label: "Frais proposés", value: count("QUOTE_SENT").toString() },
       { label: "Acceptées", value: count("ACCEPTED").toString() },
       { label: "CA potentiel", value: formatMoney(potentialRevenue) },
     ];
@@ -852,13 +792,15 @@ export default function GarageDashboard() {
         label: "Infos demandées",
         value: count("MORE_INFO_REQUESTED").toString(),
       },
-      { label: "Devis à préparer", value: count("QUOTE_PREPARING").toString() },
+      { label: "Frais à préparer", value: count("QUOTE_PREPARING").toString() },
       {
         label: "Urgences critiques",
         value: externalRequests.filter((request) => request.urgency === "CRITICAL").length.toString(),
       },
     ];
   }, [externalRequests]);
+
+  const selectedExternalRequest = externalRequests.find((request) => request.id === selectedExternalRequestId) ?? null;
 
   return (
     <main className="min-h-screen bg-black text-white">
@@ -868,8 +810,8 @@ export default function GarageDashboard() {
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-yellow-300">SL Automotive</p>
             <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Garage cockpit</h1>
             <p className="mt-2 max-w-2xl text-sm text-zinc-400">
-              Pilotage des diagnostics, lignes atelier et devis clients. WhatsApp sera branché sur le numéro atelier{" "}
-              {GARAGE_WHATSAPP_PHONE}.
+              Pilotage des diagnostics, lignes atelier et frais d&apos;intervention. WhatsApp sera branché sur le numéro
+              atelier {GARAGE_WHATSAPP_PHONE}.
             </p>
           </div>
 
@@ -1019,7 +961,7 @@ export default function GarageDashboard() {
                             </span>
                             {hasQuote && (
                               <span className="rounded-full border border-yellow-300/40 bg-yellow-300/10 px-3 py-1 text-xs font-bold text-yellow-100">
-                                Devis prêt
+                                Frais prêts
                               </span>
                             )}
                           </div>
@@ -1063,7 +1005,7 @@ export default function GarageDashboard() {
                           )}
                           {request.status !== "QUOTE_READY" && lineCount > 0 && (
                             <button className={ghostButtonClass} onClick={() => quickStatus(request.id, "QUOTE_READY")}>
-                              Devis prêt
+                              Frais prêts
                             </button>
                           )}
                           <Link href={`/dashboard/garage/${request.id}`}>
@@ -1086,8 +1028,8 @@ export default function GarageDashboard() {
               <h2 className="mt-2 text-2xl font-black">Maintenance externe</h2>
               <p className="mt-2 max-w-3xl text-sm text-zinc-400">
                 File interne SL Automotive pour les demandes de maintenance entrantes NovoTralux. Cette étape reste
-                locale : réception, analyse, demande d&apos;infos et préparation de devis sans synchronisation externe
-                pour l&apos;instant.
+                dédiée à la réception, l&apos;analyse et au suivi des frais d&apos;intervention synchronisés avec
+                NovoTralux.
               </p>
             </div>
 
@@ -1113,7 +1055,16 @@ export default function GarageDashboard() {
               </div>
             </div>
 
-            <section className="grid gap-4 lg:grid-cols-2">
+            {selectedExternalRequest ? (
+              <button
+                type="button"
+                aria-label="Fermer le détail"
+                className="fixed inset-0 z-[70] bg-black/75"
+                onClick={() => setSelectedExternalRequestId(null)}
+              />
+            ) : null}
+
+            <section className="space-y-2">
               {externalLoading ? (
                 <div className="bg-zinc-950 rounded-3xl border border-white/10 p-6 text-zinc-300">
                   Chargement de la queue maintenance externe...
@@ -1130,255 +1081,356 @@ export default function GarageDashboard() {
                   return (
                     <article
                       key={request.id}
-                      className="from-zinc-950 via-zinc-950 rounded-3xl border border-white/10 bg-gradient-to-br to-zinc-900 p-5 transition hover:-translate-y-0.5 hover:border-yellow-300/40"
+                      role={selectedExternalRequestId === request.id ? undefined : "button"}
+                      tabIndex={selectedExternalRequestId === request.id ? undefined : 0}
+                      onClick={() => {
+                        if (selectedExternalRequestId !== request.id) {
+                          setSelectedExternalRequestId(request.id);
+                        }
+                      }}
+                      onKeyDown={(event) => {
+                        if (selectedExternalRequestId !== request.id && (event.key === "Enter" || event.key === " ")) {
+                          setSelectedExternalRequestId(request.id);
+                        }
+                      }}
+                      className={
+                        selectedExternalRequestId === request.id
+                          ? "bg-zinc-950 fixed inset-x-4 top-6 z-[80] mx-auto max-h-[calc(100vh-3rem)] max-w-4xl overflow-y-auto rounded-3xl border border-yellow-300/30 p-5 shadow-2xl sm:p-7"
+                          : "bg-zinc-950 grid cursor-pointer grid-cols-2 items-center gap-3 rounded-2xl border border-white/10 px-4 py-3 transition hover:border-yellow-300/40 sm:grid-cols-4 lg:grid-cols-[1.1fr_0.8fr_1fr_1fr_0.8fr_1fr_1fr_1fr_0.9fr]"
+                      }
                     >
-                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                          <div className="flex flex-wrap gap-2">
-                            <span
-                              className={`rounded-full px-3 py-1 text-xs font-bold ${externalStatusClass(
-                                request.status
-                              )}`}
-                            >
-                              {externalMaintenanceStatusLabel(request.status)}
-                            </span>
-                            <span
-                              className={`rounded-full border px-3 py-1 text-xs font-bold ${externalUrgencyClass(
-                                request.urgency
-                              )}`}
-                            >
-                              {externalMaintenanceUrgencyLabel(request.urgency)}
-                            </span>
-                            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-bold text-zinc-300">
-                              {request.sourceCompany}
-                            </span>
-                            {latestDelivery ? (
-                              <span
-                                className={[
-                                  "rounded-full border px-3 py-1 text-xs font-bold",
-                                  latestDelivery.status === "DELIVERED"
-                                    ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
-                                    : latestDelivery.status === "FAILED"
-                                    ? "border-red-400/30 bg-red-500/10 text-red-200"
-                                    : "border-amber-300/30 bg-amber-400/10 text-amber-100",
-                                ].join(" ")}
-                              >
-                                {latestDelivery.status === "DELIVERED"
-                                  ? "Synchronisé"
-                                  : latestDelivery.status === "FAILED"
-                                  ? "Échec synchro"
-                                  : "En attente"}
-                              </span>
-                            ) : null}
-                          </div>
-                          <h2 className="mt-4 text-xl font-black text-white">
-                            {request.plateNumber || "Plaque non renseignée"}
-                          </h2>
-                          <p className="mt-1 text-sm text-zinc-400">
-                            {externalMaintenanceVehicleTypeLabel(request.vehicleType)} ·{" "}
-                            {externalMaintenanceInterventionTypeLabel(request.interventionType)} · Ref{" "}
-                            {request.externalRequestId}
-                          </p>
-                        </div>
-
-                        <div className="text-left sm:text-right">
-                          <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Date souhaitée</p>
-                          <p className="mt-2 text-sm font-semibold text-white">
-                            {request.preferredDate ? formatDate(request.preferredDate) : "À caler"}
-                          </p>
-                          {request.immobilizationRequired && (
-                            <p className="mt-3 rounded-full border border-red-400/30 bg-red-500/10 px-3 py-1 text-xs font-bold text-red-100">
-                              Immobilisation requise
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="mt-5 grid gap-3 text-sm text-zinc-300 sm:grid-cols-2">
-                        <div>
-                          <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Signalement</p>
-                          <p className="line-clamp-4 mt-1 text-white">{request.issueDescription}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Repères internes</p>
-                          <p className="mt-1 text-white">Kilométrage {formatNumber(request.mileage)} km</p>
-                          <p className="line-clamp-3 mt-1 text-zinc-400">
-                            {request.internalNotes || latestComment || "Aucune note interne."}
-                          </p>
-                        </div>
-                      </div>
-
-                      {request.quoteAmount !== null && request.quoteAmount !== undefined ? (
-                        <div className="mt-4 rounded-2xl border border-yellow-300/20 bg-yellow-300/5 p-4 text-sm">
-                          <p className="font-bold text-yellow-100">Devis : {formatMoney(request.quoteAmount)}</p>
-                          {request.quotePdfUrl ? (
-                            <a
-                              href={request.quotePdfUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="mt-2 inline-block text-yellow-300 underline"
-                            >
-                              Ouvrir le devis
-                            </a>
-                          ) : null}
-                        </div>
-                      ) : null}
-
-                      {request.invoiceAmount !== null && request.invoiceAmount !== undefined ? (
-                        <div className="mt-4 rounded-2xl border border-emerald-300/20 bg-emerald-300/5 p-4 text-sm">
-                          <p className="font-bold text-emerald-100">Facture : {formatMoney(request.invoiceAmount)}</p>
-                          {request.invoicePdfUrl ? (
-                            <a
-                              href={request.invoicePdfUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="mt-2 inline-block text-emerald-300 underline"
-                            >
-                              Ouvrir la facture
-                            </a>
-                          ) : null}
-                        </div>
-                      ) : null}
-
-                      {["UNDER_REVIEW", "QUOTE_PREPARING", "SCHEDULED"].includes(request.status) ? (
-                        <div className="mt-4 grid gap-3 rounded-2xl border border-white/10 bg-black/20 p-4">
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <input
-                              className={inputClass}
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              placeholder="Montant du devis (€)"
-                              value={quoteDrafts[request.id]?.amount ?? ""}
-                              onChange={(event) => updateQuoteDraft(request.id, "amount", event.target.value)}
-                            />
-                            <input
-                              className={inputClass}
-                              type="url"
-                              placeholder="URL du devis (optionnel)"
-                              value={quoteDrafts[request.id]?.pdfUrl ?? ""}
-                              onChange={(event) => updateQuoteDraft(request.id, "pdfUrl", event.target.value)}
-                            />
-                          </div>
-                          <input
-                            className={inputClass}
-                            placeholder="Commentaire (optionnel)"
-                            value={quoteDrafts[request.id]?.comment ?? ""}
-                            onChange={(event) => updateQuoteDraft(request.id, "comment", event.target.value)}
-                          />
-                          <button
-                            className={buttonClass}
-                            onClick={() => void sendExternalQuote(request)}
-                            disabled={externalActionId === request.id}
-                          >
-                            {externalActionId === request.id ? "Envoi en cours..." : "Envoyer devis"}
-                          </button>
-                        </div>
-                      ) : null}
-
-                      {["COMPLETED", "IN_PROGRESS", "QUOTE_APPROVED", "SCHEDULED", "INVOICED"].includes(
-                        request.status
-                      ) ? (
-                        <div className="mt-4 grid gap-3 rounded-2xl border border-white/10 bg-black/20 p-4">
+                      {selectedExternalRequestId !== request.id ? (
+                        <>
+                          <p className="font-black text-white">{request.plateNumber || "Plaque inconnue"}</p>
                           <p className="text-xs text-zinc-400">
-                            L&apos;URL de facture est optionnelle. Si elle est vide, SL Automotive
-                            genere automatiquement le PDF.
+                            {externalMaintenanceVehicleTypeLabel(request.vehicleType)}
                           </p>
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <input
-                              className={inputClass}
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              placeholder="Montant de la facture (€)"
-                              value={invoiceDrafts[request.id]?.amount ?? ""}
-                              onChange={(event) => updateInvoiceDraft(request.id, "amount", event.target.value)}
-                            />
-                            <input
-                              className={inputClass}
-                              type="url"
-                              placeholder="URL de la facture (optionnel, sinon generation automatique)"
-                              value={invoiceDrafts[request.id]?.pdfUrl ?? ""}
-                              onChange={(event) => updateInvoiceDraft(request.id, "pdfUrl", event.target.value)}
-                            />
-                          </div>
-                          <input
-                            className={inputClass}
-                            placeholder="Commentaire (optionnel)"
-                            value={invoiceDrafts[request.id]?.comment ?? ""}
-                            onChange={(event) => updateInvoiceDraft(request.id, "comment", event.target.value)}
-                          />
-                          <button
-                            className={buttonClass}
-                            onClick={() => void sendExternalInvoice(request)}
-                            disabled={externalActionId === request.id}
+                          <p className="text-xs font-semibold text-zinc-300">{request.sourceCompany}</p>
+                          <p className="text-xs text-zinc-300">
+                            {externalMaintenanceInterventionTypeLabel(request.interventionType)}
+                          </p>
+                          <span
+                            className={`w-fit rounded-full border px-2 py-1 text-[10px] font-bold ${externalUrgencyClass(
+                              request.urgency
+                            )}`}
                           >
-                            {externalActionId === request.id
-                              ? "Envoi en cours..."
-                              : request.status === "INVOICED"
-                              ? "Mettre à jour la facture"
-                              : "Envoyer facture"}
-                          </button>
-                        </div>
-                      ) : null}
-
-                      <div className="mt-5 flex flex-col gap-3 border-t border-white/10 pt-4">
-                        <div className="flex flex-wrap gap-2 text-xs text-zinc-500">
-                          <span>Créée le {formatDate(request.createdAt)}</span>
-                          <span>·</span>
-                          <span>{request.sourceSystem}</span>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {latestDelivery?.status === "FAILED" ? (
+                            {externalMaintenanceUrgencyLabel(request.urgency)}
+                          </span>
+                          <span
+                            className={`w-fit rounded-full px-2 py-1 text-[10px] font-bold ${externalStatusClass(
+                              request.status
+                            )}`}
+                          >
+                            {externalMaintenanceStatusLabel(request.status)}
+                          </span>
+                          <span className="text-xs text-zinc-400">
+                            {latestDelivery?.status === "DELIVERED"
+                              ? "Synchronisé"
+                              : latestDelivery?.status === "FAILED"
+                              ? "Échec synchro"
+                              : latestDelivery
+                              ? "En attente"
+                              : "-"}
+                          </span>
+                          <span className="text-xs text-zinc-400">
+                            {request.preferredDate ? formatDate(request.preferredDate) : "À caler"}
+                          </span>
+                          <span className="text-sm font-bold text-yellow-200">
+                            {request.quoteAmount !== null && request.quoteAmount !== undefined
+                              ? formatMoney(request.quoteAmount)
+                              : "-"}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <div className="mb-5 flex items-start justify-between gap-4">
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-yellow-300">
+                                Détail maintenance externe
+                              </p>
+                              <h3 className="mt-1 text-2xl font-black text-white">
+                                {request.plateNumber || "Plaque inconnue"}
+                              </h3>
+                            </div>
                             <button
+                              type="button"
                               className={ghostButtonClass}
-                              onClick={() => void retryExternalWebhook(request.id, latestDelivery.id)}
-                              disabled={externalActionId === request.id}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setSelectedExternalRequestId(null);
+                              }}
                             >
-                              Réessayer synchro
+                              Fermer
                             </button>
+                          </div>
+                          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                              <div className="flex flex-wrap gap-2">
+                                <span
+                                  className={`rounded-full px-3 py-1 text-xs font-bold ${externalStatusClass(
+                                    request.status
+                                  )}`}
+                                >
+                                  {externalMaintenanceStatusLabel(request.status)}
+                                </span>
+                                <span
+                                  className={`rounded-full border px-3 py-1 text-xs font-bold ${externalUrgencyClass(
+                                    request.urgency
+                                  )}`}
+                                >
+                                  {externalMaintenanceUrgencyLabel(request.urgency)}
+                                </span>
+                                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-bold text-zinc-300">
+                                  {request.sourceCompany}
+                                </span>
+                                {latestDelivery ? (
+                                  <span
+                                    className={[
+                                      "rounded-full border px-3 py-1 text-xs font-bold",
+                                      latestDelivery.status === "DELIVERED"
+                                        ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
+                                        : latestDelivery.status === "FAILED"
+                                        ? "border-red-400/30 bg-red-500/10 text-red-200"
+                                        : "border-amber-300/30 bg-amber-400/10 text-amber-100",
+                                    ].join(" ")}
+                                  >
+                                    {latestDelivery.status === "DELIVERED"
+                                      ? "Synchronisé"
+                                      : latestDelivery.status === "FAILED"
+                                      ? "Échec synchro"
+                                      : "En attente"}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <h2 className="mt-4 text-xl font-black text-white">
+                                {request.plateNumber || "Plaque non renseignée"}
+                              </h2>
+                              <p className="mt-1 text-sm text-zinc-400">
+                                {externalMaintenanceVehicleTypeLabel(request.vehicleType)} ·{" "}
+                                {externalMaintenanceInterventionTypeLabel(request.interventionType)} · Ref{" "}
+                                {request.externalRequestId}
+                              </p>
+                            </div>
+
+                            <div className="text-left sm:text-right">
+                              <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Date souhaitée</p>
+                              <p className="mt-2 text-sm font-semibold text-white">
+                                {request.preferredDate ? formatDate(request.preferredDate) : "À caler"}
+                              </p>
+                              {request.immobilizationRequired && (
+                                <p className="mt-3 rounded-full border border-red-400/30 bg-red-500/10 px-3 py-1 text-xs font-bold text-red-100">
+                                  Immobilisation requise
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="mt-5 grid gap-3 text-sm text-zinc-300 sm:grid-cols-2">
+                            <div>
+                              <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Signalement</p>
+                              <p className="line-clamp-4 mt-1 text-white">{request.issueDescription}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Repères internes</p>
+                              <p className="mt-1 text-white">Kilométrage {formatNumber(request.mileage)} km</p>
+                              <p className="line-clamp-3 mt-1 text-zinc-400">
+                                {request.internalNotes || latestComment || "Aucune note interne."}
+                              </p>
+                            </div>
+                          </div>
+
+                          {request.quoteAmount !== null ||
+                          request.invoiceAmount !== null ||
+                          request.quotePdfUrl ||
+                          request.invoicePdfUrl ? (
+                            <div className="mt-4 rounded-2xl border border-yellow-300/20 bg-yellow-300/5 p-4 text-sm">
+                              {request.quoteAmount !== null && request.quoteAmount !== undefined ? (
+                                <p className="font-bold text-yellow-100">Frais : {formatMoney(request.quoteAmount)}</p>
+                              ) : null}
+                              {request.quotePdfUrl || request.invoicePdfUrl ? (
+                                <a
+                                  href={request.quotePdfUrl || request.invoicePdfUrl || "#"}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="mt-2 inline-block text-yellow-300 underline"
+                                >
+                                  Ouvrir le PDF des frais
+                                </a>
+                              ) : null}
+                            </div>
                           ) : null}
-                          <button
-                            className={ghostButtonClass}
-                            onClick={() =>
-                              quickExternalStatus(
-                                request.id,
-                                "UNDER_REVIEW",
-                                "Pris en analyse par l'atelier SL Automotive."
-                              )
-                            }
-                            disabled={externalActionId === request.id}
-                          >
-                            Passer en analyse
-                          </button>
-                          <button
-                            className={ghostButtonClass}
-                            onClick={() =>
-                              quickExternalStatus(
-                                request.id,
-                                "MORE_INFO_REQUESTED",
-                                "Informations complémentaires demandées au partenaire."
-                              )
-                            }
-                            disabled={externalActionId === request.id}
-                          >
-                            Demander plus d&apos;infos
-                          </button>
-                          <button
-                            className={buttonClass}
-                            onClick={() =>
-                              quickExternalStatus(
-                                request.id,
-                                "QUOTE_PREPARING",
-                                "Demande transmise en préparation de devis."
-                              )
-                            }
-                            disabled={externalActionId === request.id}
-                          >
-                            Préparer devis
-                          </button>
-                        </div>
-                      </div>
+
+                          {["UNDER_REVIEW", "QUOTE_PREPARING", "SCHEDULED"].includes(request.status) ? (
+                            <div className="mt-4 grid gap-3 rounded-2xl border border-white/10 bg-black/20 p-4">
+                              <input
+                                className={inputClass}
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                placeholder="Montant des frais (€)"
+                                value={quoteDrafts[request.id]?.amount ?? ""}
+                                onChange={(event) => updateQuoteDraft(request.id, "amount", event.target.value)}
+                              />
+                              <input
+                                className={inputClass}
+                                placeholder="Commentaire (optionnel)"
+                                value={quoteDrafts[request.id]?.comment ?? ""}
+                                onChange={(event) => updateQuoteDraft(request.id, "comment", event.target.value)}
+                              />
+                              <button
+                                className={buttonClass}
+                                onClick={() => void sendExternalQuote(request)}
+                                disabled={externalActionId === request.id}
+                              >
+                                {externalActionId === request.id ? "Envoi en cours..." : "Proposer les frais"}
+                              </button>
+                            </div>
+                          ) : null}
+
+                          {request.statusHistory.length > 0 ? (
+                            <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                              <p className="text-xs font-bold uppercase tracking-[0.14em] text-zinc-500">Historique</p>
+                              <div className="mt-3 space-y-2">
+                                {request.statusHistory.map((entry) => (
+                                  <div
+                                    key={entry.id}
+                                    className="flex flex-col justify-between gap-1 border-b border-white/5 pb-2 text-xs sm:flex-row"
+                                  >
+                                    <span className="font-semibold text-zinc-200">
+                                      {externalMaintenanceStatusLabel(entry.newStatus)}
+                                    </span>
+                                    <span className="text-zinc-500">
+                                      {entry.comment || "Mise à jour"} · {formatDate(entry.createdAt)}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+
+                          <div className="mt-5 flex flex-col gap-3 border-t border-white/10 pt-4">
+                            <div className="flex flex-wrap gap-2 text-xs text-zinc-500">
+                              <span>Créée le {formatDate(request.createdAt)}</span>
+                              <span>·</span>
+                              <span>{request.sourceSystem}</span>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {latestDelivery?.status === "FAILED" ? (
+                                <button
+                                  className={ghostButtonClass}
+                                  onClick={() => void retryExternalWebhook(request.id, latestDelivery.id)}
+                                  disabled={externalActionId === request.id}
+                                >
+                                  Réessayer synchro
+                                </button>
+                              ) : null}
+                              {request.status === "RECEIVED" ? (
+                                <button
+                                  className={ghostButtonClass}
+                                  onClick={() =>
+                                    quickExternalStatus(
+                                      request.id,
+                                      "UNDER_REVIEW",
+                                      "Pris en analyse par l'atelier SL Automotive."
+                                    )
+                                  }
+                                  disabled={externalActionId === request.id}
+                                >
+                                  Passer en analyse
+                                </button>
+                              ) : null}
+                              {["RECEIVED", "UNDER_REVIEW", "QUOTE_PREPARING"].includes(request.status) ? (
+                                <button
+                                  className={ghostButtonClass}
+                                  onClick={() =>
+                                    quickExternalStatus(
+                                      request.id,
+                                      "MORE_INFO_REQUESTED",
+                                      "Informations complémentaires demandées au partenaire."
+                                    )
+                                  }
+                                  disabled={externalActionId === request.id}
+                                >
+                                  Demander plus d&apos;infos
+                                </button>
+                              ) : null}
+                              {["UNDER_REVIEW", "MORE_INFO_REQUESTED"].includes(request.status) ? (
+                                <button
+                                  className={ghostButtonClass}
+                                  onClick={() =>
+                                    quickExternalStatus(
+                                      request.id,
+                                      "QUOTE_PREPARING",
+                                      "Préparation de la proposition de frais."
+                                    )
+                                  }
+                                  disabled={externalActionId === request.id}
+                                >
+                                  Préparer les frais
+                                </button>
+                              ) : null}
+                              {request.status === "QUOTE_APPROVED" ? (
+                                <button
+                                  className={buttonClass}
+                                  onClick={() =>
+                                    quickExternalStatus(request.id, "SCHEDULED", "Intervention planifiée.")
+                                  }
+                                  disabled={externalActionId === request.id}
+                                >
+                                  Planifier intervention
+                                </button>
+                              ) : null}
+                              {request.status === "SCHEDULED" ? (
+                                <button
+                                  className={buttonClass}
+                                  onClick={() =>
+                                    quickExternalStatus(request.id, "IN_PROGRESS", "Intervention démarrée.")
+                                  }
+                                  disabled={externalActionId === request.id}
+                                >
+                                  Démarrer intervention
+                                </button>
+                              ) : null}
+                              {request.status === "IN_PROGRESS" ? (
+                                <button
+                                  className={buttonClass}
+                                  onClick={() => quickExternalStatus(request.id, "COMPLETED", "Intervention terminée.")}
+                                  disabled={externalActionId === request.id}
+                                >
+                                  Marquer terminée
+                                </button>
+                              ) : null}
+                              {request.status === "COMPLETED" ? (
+                                <button
+                                  className={buttonClass}
+                                  onClick={() => quickExternalStatus(request.id, "PAID", "Frais marqués comme payés.")}
+                                  disabled={externalActionId === request.id}
+                                >
+                                  Marquer payée
+                                </button>
+                              ) : null}
+                              {request.status === "PAID" || request.status === "INVOICED" ? (
+                                <button
+                                  className={buttonClass}
+                                  onClick={() => quickExternalStatus(request.id, "CLOSED", "Intervention clôturée.")}
+                                  disabled={externalActionId === request.id}
+                                >
+                                  Clôturer intervention
+                                </button>
+                              ) : null}
+                              {!["COMPLETED", "INVOICED", "PAID", "CLOSED", "CANCELLED"].includes(request.status) ? (
+                                <button
+                                  className={ghostButtonClass}
+                                  onClick={() => quickExternalStatus(request.id, "CANCELLED", "Intervention annulée.")}
+                                  disabled={externalActionId === request.id}
+                                >
+                                  Annuler
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </article>
                   );
                 })

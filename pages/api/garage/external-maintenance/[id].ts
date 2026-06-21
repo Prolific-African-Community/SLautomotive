@@ -157,7 +157,7 @@ export default async function handler(
         return res.status(409).json({
           success: false,
           message:
-            "A valid quote amount and an eligible maintenance status are required.",
+            "A valid fees amount and an eligible maintenance status are required.",
         });
       }
 
@@ -198,7 +198,11 @@ export default async function handler(
 
       let resolvedInvoicePdfUrl: string | null = manualInvoicePdfUrl ?? null;
 
-      if (isSendInvoice && !resolvedInvoicePdfUrl && shouldReuseExistingInvoicePdf) {
+      if (
+        isSendInvoice &&
+        !resolvedInvoicePdfUrl &&
+        shouldReuseExistingInvoicePdf
+      ) {
         resolvedInvoicePdfUrl = existing.invoicePdfUrl;
       }
 
@@ -230,7 +234,7 @@ export default async function handler(
             status: ExternalMaintenanceStatus.QUOTE_SENT,
             statusComment:
               parseString(req.body?.statusComment) ??
-              "Quote sent to NovoTralux.",
+              "Fees proposed to NovoTralux.",
           }
         : buildExternalMaintenancePatchData(req.body);
 

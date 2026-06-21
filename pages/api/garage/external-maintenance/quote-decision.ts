@@ -5,8 +5,19 @@ import {
 import type { NextApiRequest, NextApiResponse } from "next";
 
 import { verifyNovoTraluxApiKey } from "../../../../lib/external-maintenance";
+import { generateExternalMaintenanceFeesPdf } from "../../../../lib/external-maintenance-invoice";
 import { parseString, serializeError } from "../../../../lib/garage";
+import { sendNovoTraluxMaintenanceStatusWebhook } from "../../../../lib/novotralux-maintenance-webhook";
 import { prisma } from "../../../../lib/prisma";
+
+function getRequestOriginFallback(req: NextApiRequest) {
+  const forwardedProto = Array.isArray(req.headers["x-forwarded-proto"])
+    ? req.headers["x-forwarded-proto"][0]
+    : req.headers["x-forwarded-proto"];
+  return req.headers.host
+    ? `${forwardedProto || "http"}://${req.headers.host}`
+    : null;
+}
 
 export default async function handler(
   req: NextApiRequest,
@@ -40,7 +51,7 @@ export default async function handler(
   ) {
     return res.status(400).json({
       success: false,
-      message: "Invalid quote decision payload.",
+      message: "Invalid fees decision payload.",
     });
   }
 
@@ -65,42 +76,81 @@ export default async function handler(
         ? ExternalMaintenanceStatus.QUOTE_APPROVED
         : ExternalMaintenanceStatus.QUOTE_REJECTED;
 
-    if (existing.status === targetStatus) {
+    if (
+      existing.status === targetStatus &&
+      (decision === "reject" || existing.quotePdfUrl)
+    ) {
       return res
         .status(200)
         .json({ success: true, idempotent: true, data: existing });
     }
 
-    if (existing.status !== ExternalMaintenanceStatus.QUOTE_SENT) {
+    if (
+      existing.status !== ExternalMaintenanceStatus.QUOTE_SENT &&
+      existing.status !== targetStatus
+    ) {
       return res.status(409).json({
         success: false,
-        message: "Quote decision requires status QUOTE_SENT.",
+        message: "Fees decision requires status QUOTE_SENT.",
       });
+    }
+
+    let generatedFeesPdfUrl: string | null = existing.quotePdfUrl;
+
+    if (decision === "approve" && !generatedFeesPdfUrl) {
+      if (existing.quoteAmount === null) {
+        return res.status(409).json({
+          success: false,
+          message: "Fees amount is required before approval.",
+        });
+      }
+
+      const generatedFeesPdf = await generateExternalMaintenanceFeesPdf(
+        getRequestOriginFallback(req),
+        existing,
+        existing.quoteAmount,
+        comment
+      );
+      generatedFeesPdfUrl = generatedFeesPdf.absoluteUrl;
     }
 
     const updated = await prisma.$transaction(async (tx) => {
       const request = await tx.externalMaintenanceRequest.update({
         where: { id: existing.id },
-        data: { status: targetStatus },
-      });
-      await tx.externalMaintenanceStatusHistory.create({
         data: {
-          externalMaintenanceRequestId: existing.id,
-          oldStatus: existing.status,
-          newStatus: targetStatus,
-          comment:
-            comment ??
-            (decision === "approve"
-              ? "Quote approved by NovoTralux."
-              : "Quote rejected by NovoTralux."),
+          status: targetStatus,
+          quotePdfUrl: decision === "approve" ? generatedFeesPdfUrl : undefined,
         },
       });
+      if (existing.status !== targetStatus) {
+        await tx.externalMaintenanceStatusHistory.create({
+          data: {
+            externalMaintenanceRequestId: existing.id,
+            oldStatus: existing.status,
+            newStatus: targetStatus,
+            comment:
+              comment ??
+              (decision === "approve"
+                ? "Fees accepted by NovoTralux."
+                : "Fees rejected by NovoTralux."),
+          },
+        });
+      }
       return request;
     });
 
-    return res
-      .status(200)
-      .json({ success: true, idempotent: false, data: updated });
+    if (decision === "approve") {
+      await sendNovoTraluxMaintenanceStatusWebhook(
+        updated,
+        comment ?? "Frais acceptés et PDF généré par SL Automotive."
+      );
+    }
+
+    return res.status(200).json({
+      success: true,
+      idempotent: existing.status === targetStatus,
+      data: updated,
+    });
   } catch (error) {
     console.error("POST quote-decision error:", error);
     return res.status(500).json({

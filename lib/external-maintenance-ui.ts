@@ -10,6 +10,8 @@ export const EXTERNAL_MAINTENANCE_STATUSES = [
   "IN_PROGRESS",
   "COMPLETED",
   "INVOICED",
+  "PAID",
+  "CLOSED",
   "CANCELLED",
 ];
 
@@ -18,14 +20,16 @@ export function externalMaintenanceStatusLabel(status: string) {
     RECEIVED: "Reçue",
     UNDER_REVIEW: "En analyse",
     MORE_INFO_REQUESTED: "Infos demandées",
-    QUOTE_PREPARING: "Devis en préparation",
-    QUOTE_SENT: "Devis envoyé",
-    QUOTE_APPROVED: "Devis accepté",
-    QUOTE_REJECTED: "Devis refusé",
+    QUOTE_PREPARING: "Frais en préparation",
+    QUOTE_SENT: "Frais proposés",
+    QUOTE_APPROVED: "Frais acceptés",
+    QUOTE_REJECTED: "Frais refusés",
     SCHEDULED: "Planifiée",
     IN_PROGRESS: "En cours",
     COMPLETED: "Terminée",
-    INVOICED: "Facturée",
+    INVOICED: "Payée",
+    PAID: "Payée",
+    CLOSED: "Clôturée",
     CANCELLED: "Annulée",
   };
 

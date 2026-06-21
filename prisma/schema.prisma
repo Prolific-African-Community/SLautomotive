@@ -376,6 +376,8 @@ enum ExternalMaintenanceStatus {
   IN_PROGRESS
   COMPLETED
   INVOICED
+  PAID
+  CLOSED
   CANCELLED
 }
 
