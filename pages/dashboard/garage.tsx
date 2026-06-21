@@ -1,5 +1,12 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  EXTERNAL_MAINTENANCE_STATUSES,
+  externalMaintenanceInterventionTypeLabel,
+  externalMaintenanceStatusLabel,
+  externalMaintenanceUrgencyLabel,
+  externalMaintenanceVehicleTypeLabel,
+} from "../../lib/external-maintenance-ui";
 import { GARAGE_WHATSAPP_PHONE } from "../../lib/garage-whatsapp";
 
 type GarageRequest = {
@@ -45,6 +52,39 @@ type InterventionCode = {
   updatedAt: string;
 };
 
+type ExternalMaintenanceStatusHistory = {
+  id: string;
+  oldStatus?: string | null;
+  newStatus: string;
+  comment?: string | null;
+  createdAt: string;
+};
+
+type ExternalMaintenanceRequest = {
+  id: string;
+  sourceCompany: string;
+  sourceSystem: string;
+  externalRequestId: string;
+  externalVehicleId?: string | null;
+  vehicleType: string;
+  plateNumber?: string | null;
+  interventionType: string;
+  urgency: string;
+  status: string;
+  mileage?: number | null;
+  immobilizationRequired: boolean;
+  preferredDate?: string | null;
+  issueDescription: string;
+  internalNotes?: string | null;
+  quoteAmount?: number | null;
+  invoiceAmount?: number | null;
+  quotePdfUrl?: string | null;
+  invoicePdfUrl?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  statusHistory: ExternalMaintenanceStatusHistory[];
+};
+
 type RequestForm = {
   firstName: string;
   lastName: string;
@@ -72,6 +112,12 @@ type CodeForm = {
   defaultQty: string;
   estimatedMinutes: string;
   isActive: boolean;
+};
+
+type QuoteDraft = {
+  amount: string;
+  pdfUrl: string;
+  comment: string;
 };
 
 type ApiResponse<T> = {
@@ -224,6 +270,33 @@ function priorityClass(priority: string) {
   return "border-yellow-300/30 bg-yellow-300/10 text-yellow-100";
 }
 
+function externalStatusClass(status: string) {
+  if (status === "RECEIVED") return "bg-yellow-300 text-black";
+  if (status === "UNDER_REVIEW" || status === "QUOTE_PREPARING") {
+    return "bg-blue-400 text-black";
+  }
+  if (
+    status === "QUOTE_APPROVED" ||
+    status === "SCHEDULED" ||
+    status === "IN_PROGRESS" ||
+    status === "COMPLETED" ||
+    status === "INVOICED"
+  ) {
+    return "bg-emerald-400 text-black";
+  }
+  if (status === "QUOTE_REJECTED" || status === "CANCELLED") {
+    return "bg-red-500 text-white";
+  }
+  return "bg-white/10 text-zinc-300";
+}
+
+function externalUrgencyClass(urgency: string) {
+  if (urgency === "CRITICAL") return "border-red-400/50 bg-red-500/15 text-red-100";
+  if (urgency === "HIGH") return "border-orange-300/50 bg-orange-500/15 text-orange-100";
+  if (urgency === "LOW") return "border-white/10 bg-white/5 text-zinc-400";
+  return "border-yellow-300/30 bg-yellow-300/10 text-yellow-100";
+}
+
 function toNullableNumber(value: string) {
   if (!value.trim()) return null;
   const number = Number(value);
@@ -242,14 +315,18 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<ApiResp
 }
 
 export default function GarageDashboard() {
-  const [activeTab, setActiveTab] = useState<"requests" | "codes">("requests");
+  const [activeTab, setActiveTab] = useState<"requests" | "external" | "codes">("requests");
   const [requests, setRequests] = useState<GarageRequest[]>([]);
   const [codes, setCodes] = useState<InterventionCode[]>([]);
+  const [externalRequests, setExternalRequests] = useState<ExternalMaintenanceRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [codesLoading, setCodesLoading] = useState(false);
+  const [externalLoading, setExternalLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingCode, setSavingCode] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const [externalActionId, setExternalActionId] = useState<string | null>(null);
+  const [quoteDrafts, setQuoteDrafts] = useState<Record<string, QuoteDraft>>({});
   const [showForm, setShowForm] = useState(false);
   const [showCodeForm, setShowCodeForm] = useState(false);
   const [form, setForm] = useState<RequestForm>(EMPTY_FORM);
@@ -294,9 +371,7 @@ export default function GarageDashboard() {
       unitPrice: String(code.unitPrice),
       defaultQty: String(code.defaultQty),
       estimatedMinutes:
-        code.estimatedMinutes === null || code.estimatedMinutes === undefined
-          ? ""
-          : String(code.estimatedMinutes),
+        code.estimatedMinutes === null || code.estimatedMinutes === undefined ? "" : String(code.estimatedMinutes),
       isActive: code.isActive,
     });
     setShowCodeForm(true);
@@ -309,9 +384,7 @@ export default function GarageDashboard() {
   function validateCodeForm() {
     const unitPrice = Number(codeForm.unitPrice);
     const defaultQty = Number(codeForm.defaultQty);
-    const estimatedMinutes = codeForm.estimatedMinutes.trim()
-      ? Number(codeForm.estimatedMinutes)
-      : null;
+    const estimatedMinutes = codeForm.estimatedMinutes.trim() ? Number(codeForm.estimatedMinutes) : null;
 
     if (!codeForm.code.trim()) return "Le code est obligatoire.";
     if (!codeForm.label.trim()) return "Le libellé est obligatoire.";
@@ -322,10 +395,7 @@ export default function GarageDashboard() {
     if (!Number.isFinite(defaultQty) || defaultQty <= 0) {
       return "La quantité par défaut doit être supérieure à 0.";
     }
-    if (
-      estimatedMinutes !== null &&
-      (!Number.isFinite(estimatedMinutes) || estimatedMinutes < 0)
-    ) {
+    if (estimatedMinutes !== null && (!Number.isFinite(estimatedMinutes) || estimatedMinutes < 0)) {
       return "La durée estimée doit être supérieure ou égale à 0.";
     }
 
@@ -340,9 +410,7 @@ export default function GarageDashboard() {
       description: codeForm.description.trim() || null,
       unitPrice: Number(codeForm.unitPrice),
       defaultQty: Number(codeForm.defaultQty),
-      estimatedMinutes: codeForm.estimatedMinutes.trim()
-        ? Number(codeForm.estimatedMinutes)
-        : null,
+      estimatedMinutes: codeForm.estimatedMinutes.trim() ? Number(codeForm.estimatedMinutes) : null,
       isActive: codeForm.isActive,
     };
   }
@@ -372,20 +440,28 @@ export default function GarageDashboard() {
       if (codeStatusFilter === "ACTIVE") params.set("activeOnly", "true");
 
       const json = await fetchJson<InterventionCode[]>(
-        `/api/garage/intervention-codes${
-          params.toString() ? `?${params.toString()}` : ""
-        }`
+        `/api/garage/intervention-codes${params.toString() ? `?${params.toString()}` : ""}`
       );
       const data = json.data || [];
-      setCodes(
-        codeStatusFilter === "INACTIVE"
-          ? data.filter((code) => !code.isActive)
-          : data
-      );
+      setCodes(codeStatusFilter === "INACTIVE" ? data.filter((code) => !code.isActive) : data);
     } catch (err: any) {
       setError(err?.message || "Impossible de charger les codes intervention.");
     } finally {
       setCodesLoading(false);
+    }
+  }
+
+  async function loadExternalRequests() {
+    try {
+      setExternalLoading(true);
+      setError(null);
+
+      const json = await fetchJson<ExternalMaintenanceRequest[]>("/api/garage/external-maintenance");
+      setExternalRequests(json.data || []);
+    } catch (err: any) {
+      setError(err?.message || "Impossible de charger les demandes de maintenance externe.");
+    } finally {
+      setExternalLoading(false);
     }
   }
 
@@ -420,12 +496,7 @@ export default function GarageDashboard() {
   }
 
   async function seedCodes(overwrite = false) {
-    if (
-      overwrite &&
-      !window.confirm(
-        "Cela peut écraser les prix et descriptions des codes standards. Continuer ?"
-      )
-    ) {
+    if (overwrite && !window.confirm("Cela peut écraser les prix et descriptions des codes standards. Continuer ?")) {
       return;
     }
 
@@ -471,6 +542,76 @@ export default function GarageDashboard() {
     }
   }
 
+  async function quickExternalStatus(id: string, status: string, statusComment: string) {
+    try {
+      setExternalActionId(id);
+      setError(null);
+      setMessage(null);
+
+      await fetchJson<ExternalMaintenanceRequest>(`/api/garage/external-maintenance/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status, statusComment }),
+      });
+
+      setMessage("Statut maintenance externe mis à jour.");
+      await loadExternalRequests();
+    } catch (err: any) {
+      setError(err?.message || "Mise à jour maintenance externe impossible.");
+    } finally {
+      setExternalActionId(null);
+    }
+  }
+
+  function updateQuoteDraft(id: string, field: keyof QuoteDraft, value: string) {
+    setQuoteDrafts((current) => ({
+      ...current,
+      [id]: {
+        amount: current[id]?.amount ?? "",
+        pdfUrl: current[id]?.pdfUrl ?? "",
+        comment: current[id]?.comment ?? "",
+        [field]: value,
+      },
+    }));
+  }
+
+  async function sendExternalQuote(request: ExternalMaintenanceRequest) {
+    const draft = quoteDrafts[request.id];
+    const quoteAmount = Number(draft?.amount);
+
+    if (!draft?.amount.trim() || !Number.isFinite(quoteAmount) || quoteAmount < 0) {
+      setError("Le montant du devis est obligatoire et doit être valide.");
+      return;
+    }
+
+    try {
+      setExternalActionId(request.id);
+      setError(null);
+      setMessage(null);
+      await fetchJson<ExternalMaintenanceRequest>(`/api/garage/external-maintenance/${request.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "send_quote",
+          quoteAmount,
+          quotePdfUrl: draft.pdfUrl.trim() || null,
+          statusComment: draft.comment.trim() || null,
+        }),
+      });
+      setMessage("Devis envoyé à NovoTralux.");
+      setQuoteDrafts((current) => {
+        const next = { ...current };
+        delete next[request.id];
+        return next;
+      });
+      await loadExternalRequests();
+    } catch (err: any) {
+      setError(err?.message || "Envoi du devis impossible.");
+    } finally {
+      setExternalActionId(null);
+    }
+  }
+
   async function saveCode(e: FormEvent) {
     e.preventDefault();
 
@@ -489,9 +630,7 @@ export default function GarageDashboard() {
       const isEditing = Boolean(codeForm.id);
 
       await fetchJson<InterventionCode>(
-        isEditing
-          ? `/api/garage/intervention-codes/${codeForm.id}`
-          : "/api/garage/intervention-codes",
+        isEditing ? `/api/garage/intervention-codes/${codeForm.id}` : "/api/garage/intervention-codes",
         {
           method: isEditing ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json" },
@@ -546,6 +685,11 @@ export default function GarageDashboard() {
   }, []);
 
   useEffect(() => {
+    if (activeTab !== "external") return;
+    loadExternalRequests();
+  }, [activeTab]);
+
+  useEffect(() => {
     if (activeTab !== "codes") return;
     loadCodes();
   }, [activeTab, codeCategoryFilter, codeSearch, codeStatusFilter]);
@@ -578,12 +722,9 @@ export default function GarageDashboard() {
   }, [priorityFilter, requests, search, statusFilter]);
 
   const kpis = useMemo(() => {
-    const count = (status: string) =>
-      requests.filter((request) => request.status === status).length;
+    const count = (status: string) => requests.filter((request) => request.status === status).length;
     const potentialRevenue = requests
-      .filter((request) =>
-        ["QUOTE_READY", "QUOTE_SENT", "ACCEPTED"].includes(request.status)
-      )
+      .filter((request) => ["QUOTE_READY", "QUOTE_SENT", "ACCEPTED"].includes(request.status))
       .reduce((sum, request) => sum + (request.quoteTotal || 0), 0);
 
     return [
@@ -599,9 +740,7 @@ export default function GarageDashboard() {
 
   const availableCodeCategories = useMemo(() => {
     const dynamicCategories = codes.map((code) => code.category).filter(Boolean);
-    return Array.from(new Set([...CATEGORY_OPTIONS, ...dynamicCategories])).sort((a, b) =>
-      a.localeCompare(b)
-    );
+    return Array.from(new Set([...CATEGORY_OPTIONS, ...dynamicCategories])).sort((a, b) => a.localeCompare(b));
   }, [codes]);
 
   const codeStats = useMemo(
@@ -613,20 +752,35 @@ export default function GarageDashboard() {
     [codes]
   );
 
+  const externalKpis = useMemo(() => {
+    const count = (status: string) => externalRequests.filter((request) => request.status === status).length;
+
+    return [
+      { label: "Total queue", value: externalRequests.length.toString() },
+      { label: "Reçues", value: count("RECEIVED").toString() },
+      { label: "En analyse", value: count("UNDER_REVIEW").toString() },
+      {
+        label: "Infos demandées",
+        value: count("MORE_INFO_REQUESTED").toString(),
+      },
+      { label: "Devis à préparer", value: count("QUOTE_PREPARING").toString() },
+      {
+        label: "Urgences critiques",
+        value: externalRequests.filter((request) => request.urgency === "CRITICAL").length.toString(),
+      },
+    ];
+  }, [externalRequests]);
+
   return (
     <main className="min-h-screen bg-black text-white">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-5 py-6 sm:px-8 lg:px-10">
-        <header className="flex flex-col gap-5 rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-950 via-black to-zinc-900 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:p-7 lg:flex-row lg:items-center lg:justify-between">
+        <header className="from-zinc-950 flex flex-col gap-5 rounded-3xl border border-white/10 bg-gradient-to-br via-black to-zinc-900 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:p-7 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-yellow-300">
-              SL Automotive
-            </p>
-            <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">
-              Garage cockpit
-            </h1>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-yellow-300">SL Automotive</p>
+            <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Garage cockpit</h1>
             <p className="mt-2 max-w-2xl text-sm text-zinc-400">
-              Pilotage des diagnostics, lignes atelier et devis clients. WhatsApp
-              sera branché sur le numéro atelier {GARAGE_WHATSAPP_PHONE}.
+              Pilotage des diagnostics, lignes atelier et devis clients. WhatsApp sera branché sur le numéro atelier{" "}
+              {GARAGE_WHATSAPP_PHONE}.
             </p>
           </div>
 
@@ -634,14 +788,24 @@ export default function GarageDashboard() {
             <button className={buttonClass} onClick={() => setShowForm(true)}>
               Nouvelle demande
             </button>
-            <button
-              className={ghostButtonClass}
-              onClick={() => seedCodes(false)}
-              disabled={seeding}
-            >
+            <button className={ghostButtonClass} onClick={() => seedCodes(false)} disabled={seeding}>
               {seeding ? "Initialisation..." : "Initialiser codes"}
             </button>
-            <button className={ghostButtonClass} onClick={loadRequests} disabled={loading}>
+            <button
+              className={ghostButtonClass}
+              onClick={() => {
+                if (activeTab === "codes") {
+                  loadCodes();
+                  return;
+                }
+                if (activeTab === "external") {
+                  loadExternalRequests();
+                  return;
+                }
+                loadRequests();
+              }}
+              disabled={activeTab === "codes" ? codesLoading : activeTab === "external" ? externalLoading : loading}
+            >
               Rafraîchir
             </button>
           </div>
@@ -661,9 +825,7 @@ export default function GarageDashboard() {
 
         <section className="flex flex-wrap gap-3">
           <button
-            className={
-              activeTab === "requests" ? buttonClass : ghostButtonClass
-            }
+            className={activeTab === "requests" ? buttonClass : ghostButtonClass}
             onClick={() => setActiveTab("requests")}
           >
             Demandes
@@ -674,198 +836,386 @@ export default function GarageDashboard() {
           >
             Codes intervention
           </button>
+          <button
+            className={activeTab === "external" ? buttonClass : ghostButtonClass}
+            onClick={() => setActiveTab("external")}
+          >
+            Maintenance externe
+          </button>
         </section>
 
         {activeTab === "requests" && (
           <>
-        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-          {kpis.map((kpi) => (
-            <div
-              key={kpi.label}
-              className="rounded-3xl border border-white/10 bg-zinc-950 p-4"
-            >
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
-                {kpi.label}
-              </p>
-              <p className="mt-3 text-2xl font-black text-white">{kpi.value}</p>
-            </div>
-          ))}
-        </section>
+            <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+              {kpis.map((kpi) => (
+                <div key={kpi.label} className="bg-zinc-950 rounded-3xl border border-white/10 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">{kpi.label}</p>
+                  <p className="mt-3 text-2xl font-black text-white">{kpi.value}</p>
+                </div>
+              ))}
+            </section>
 
-        <section className="grid gap-3 rounded-3xl border border-white/10 bg-zinc-950 p-4 md:grid-cols-[1fr_220px_220px]">
-          <input
-            className={inputClass}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Recherche client, téléphone, véhicule, description..."
-          />
-          <select
-            className={inputClass}
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            {STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {statusLabel(status)}
-              </option>
-            ))}
-          </select>
-          <select
-            className={inputClass}
-            value={priorityFilter}
-            onChange={(e) => setPriorityFilter(e.target.value)}
-          >
-            {PRIORITIES.map((priority) => (
-              <option key={priority} value={priority}>
-                {priorityLabel(priority)}
-              </option>
-            ))}
-          </select>
-        </section>
+            <section className="bg-zinc-950 grid gap-3 rounded-3xl border border-white/10 p-4 md:grid-cols-[1fr_220px_220px]">
+              <input
+                className={inputClass}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Recherche client, téléphone, véhicule, description..."
+              />
+              <select className={inputClass} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                {STATUSES.map((status) => (
+                  <option key={status} value={status}>
+                    {statusLabel(status)}
+                  </option>
+                ))}
+              </select>
+              <select className={inputClass} value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)}>
+                {PRIORITIES.map((priority) => (
+                  <option key={priority} value={priority}>
+                    {priorityLabel(priority)}
+                  </option>
+                ))}
+              </select>
+            </section>
 
-        <section className="grid gap-4 lg:grid-cols-2">
-          {loading ? (
-            <div className="rounded-3xl border border-white/10 bg-zinc-950 p-6 text-zinc-300">
-              Chargement des demandes garage...
-            </div>
-          ) : filteredRequests.length === 0 ? (
-            <div className="rounded-3xl border border-white/10 bg-zinc-950 p-6 text-zinc-300">
-              Aucune demande ne correspond aux filtres.
-            </div>
-          ) : (
-            filteredRequests.map((request) => {
-              const clientName =
-                [request.firstName, request.lastName].filter(Boolean).join(" ") ||
-                "Client non renseigné";
-              const vehicle =
-                [request.vehicleBrand, request.vehicleModel, request.vehicleYear]
-                  .filter(Boolean)
-                  .join(" ") || "Véhicule à préciser";
-              const lineCount =
-                request.summary?.interventionCount ?? request.interventions.length;
-              const hasQuote = Boolean(request.quoteTotal && request.quoteTotal > 0);
+            <section className="grid gap-4 lg:grid-cols-2">
+              {loading ? (
+                <div className="bg-zinc-950 rounded-3xl border border-white/10 p-6 text-zinc-300">
+                  Chargement des demandes garage...
+                </div>
+              ) : filteredRequests.length === 0 ? (
+                <div className="bg-zinc-950 rounded-3xl border border-white/10 p-6 text-zinc-300">
+                  Aucune demande ne correspond aux filtres.
+                </div>
+              ) : (
+                filteredRequests.map((request) => {
+                  const clientName =
+                    [request.firstName, request.lastName].filter(Boolean).join(" ") || "Client non renseigné";
+                  const vehicle =
+                    [request.vehicleBrand, request.vehicleModel, request.vehicleYear].filter(Boolean).join(" ") ||
+                    "Véhicule à préciser";
+                  const lineCount = request.summary?.interventionCount ?? request.interventions.length;
+                  const hasQuote = Boolean(request.quoteTotal && request.quoteTotal > 0);
 
-              return (
-                <article
-                  key={request.id}
-                  className="rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-950 via-zinc-950 to-zinc-900 p-5 transition hover:-translate-y-0.5 hover:border-yellow-300/40"
-                >
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <div className="flex flex-wrap gap-2">
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-bold ${statusClass(
-                            request.status
-                          )}`}
-                        >
-                          {statusLabel(request.status)}
-                        </span>
-                        <span
-                          className={`rounded-full border px-3 py-1 text-xs font-bold ${priorityClass(
-                            request.priority
-                          )}`}
-                        >
-                          {priorityLabel(request.priority)}
-                        </span>
+                  return (
+                    <article
+                      key={request.id}
+                      className="from-zinc-950 via-zinc-950 rounded-3xl border border-white/10 bg-gradient-to-br to-zinc-900 p-5 transition hover:-translate-y-0.5 hover:border-yellow-300/40"
+                    >
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <div className="flex flex-wrap gap-2">
+                            <span className={`rounded-full px-3 py-1 text-xs font-bold ${statusClass(request.status)}`}>
+                              {statusLabel(request.status)}
+                            </span>
+                            <span
+                              className={`rounded-full border px-3 py-1 text-xs font-bold ${priorityClass(
+                                request.priority
+                              )}`}
+                            >
+                              {priorityLabel(request.priority)}
+                            </span>
+                          </div>
+                          <h2 className="mt-4 text-xl font-black">{clientName}</h2>
+                          <p className="mt-1 text-sm text-zinc-400">{request.phone || "-"}</p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <span
+                              className={`rounded-full border px-3 py-1 text-xs font-bold ${
+                                request.phone
+                                  ? "border-emerald-300/30 bg-emerald-400/10 text-emerald-100"
+                                  : "border-white/10 bg-white/5 text-zinc-500"
+                              }`}
+                            >
+                              {request.phone ? "WhatsApp possible" : "Téléphone manquant"}
+                            </span>
+                            {hasQuote && (
+                              <span className="rounded-full border border-yellow-300/40 bg-yellow-300/10 px-3 py-1 text-xs font-bold text-yellow-100">
+                                Devis prêt
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-left sm:text-right">
+                          <p className="rounded-2xl border border-yellow-300/25 bg-yellow-300/10 px-4 py-3 text-3xl font-black text-yellow-200">
+                            {formatMoney(request.quoteTotal)}
+                          </p>
+                          <p className="text-xs text-zinc-500">
+                            {lineCount} ligne{lineCount > 1 ? "s" : ""}
+                          </p>
+                        </div>
                       </div>
-                      <h2 className="mt-4 text-xl font-black">{clientName}</h2>
-                      <p className="mt-1 text-sm text-zinc-400">{request.phone || "-"}</p>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <span
-                          className={`rounded-full border px-3 py-1 text-xs font-bold ${
-                            request.phone
-                              ? "border-emerald-300/30 bg-emerald-400/10 text-emerald-100"
-                              : "border-white/10 bg-white/5 text-zinc-500"
-                          }`}
-                        >
-                          {request.phone ? "WhatsApp possible" : "Téléphone manquant"}
-                        </span>
-                        {hasQuote && (
-                          <span className="rounded-full border border-yellow-300/40 bg-yellow-300/10 px-3 py-1 text-xs font-bold text-yellow-100">
-                            Devis prêt
-                          </span>
-                        )}
+
+                      <div className="mt-5 grid gap-3 text-sm text-zinc-300 sm:grid-cols-2">
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Véhicule</p>
+                          <p className="mt-1 font-semibold text-white">{vehicle}</p>
+                          <p className="text-zinc-500">
+                            {request.plateNumber || "Plaque non renseignée"} · {formatNumber(request.mileage)} km
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Problème</p>
+                          <p className="mt-1 font-semibold text-white">
+                            {request.problemType || "Diagnostic à qualifier"}
+                          </p>
+                          <p className="line-clamp-2 text-zinc-500">
+                            {request.description || request.symptoms.join(", ") || "-"}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="text-left sm:text-right">
-                      <p className="rounded-2xl border border-yellow-300/25 bg-yellow-300/10 px-4 py-3 text-3xl font-black text-yellow-200">
-                        {formatMoney(request.quoteTotal)}
-                      </p>
-                      <p className="text-xs text-zinc-500">
-                        {lineCount} ligne{lineCount > 1 ? "s" : ""}
-                      </p>
-                    </div>
-                  </div>
 
-                  <div className="mt-5 grid gap-3 text-sm text-zinc-300 sm:grid-cols-2">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">
-                        Véhicule
-                      </p>
-                      <p className="mt-1 font-semibold text-white">{vehicle}</p>
-                      <p className="text-zinc-500">
-                        {request.plateNumber || "Plaque non renseignée"} ·{" "}
-                        {formatNumber(request.mileage)} km
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">
-                        Problème
-                      </p>
-                      <p className="mt-1 font-semibold text-white">
-                        {request.problemType || "Diagnostic à qualifier"}
-                      </p>
-                      <p className="line-clamp-2 text-zinc-500">
-                        {request.description || request.symptoms.join(", ") || "-"}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-5 flex flex-col gap-3 border-t border-white/10 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-xs text-zinc-500">
-                      Créée le {formatDate(request.createdAt)}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {request.status === "NEW" && (
-                        <button
-                          className={ghostButtonClass}
-                          onClick={() => quickStatus(request.id, "IN_REVIEW")}
-                        >
-                          Passer en analyse
-                        </button>
-                      )}
-                      {request.status !== "QUOTE_READY" && lineCount > 0 && (
-                        <button
-                          className={ghostButtonClass}
-                          onClick={() => quickStatus(request.id, "QUOTE_READY")}
-                        >
-                          Devis prêt
-                        </button>
-                      )}
-                      <Link href={`/dashboard/garage/${request.id}`}>
-                        <a className={buttonClass}>Ouvrir</a>
-                      </Link>
-                    </div>
-                  </div>
-                </article>
-              );
-            })
-          )}
-        </section>
+                      <div className="mt-5 flex flex-col gap-3 border-t border-white/10 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-xs text-zinc-500">Créée le {formatDate(request.createdAt)}</p>
+                        <div className="flex flex-wrap gap-2">
+                          {request.status === "NEW" && (
+                            <button className={ghostButtonClass} onClick={() => quickStatus(request.id, "IN_REVIEW")}>
+                              Passer en analyse
+                            </button>
+                          )}
+                          {request.status !== "QUOTE_READY" && lineCount > 0 && (
+                            <button className={ghostButtonClass} onClick={() => quickStatus(request.id, "QUOTE_READY")}>
+                              Devis prêt
+                            </button>
+                          )}
+                          <Link href={`/dashboard/garage/${request.id}`}>
+                            <a className={buttonClass}>Ouvrir</a>
+                          </Link>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })
+              )}
+            </section>
           </>
+        )}
+
+        {activeTab === "external" && (
+          <section className="flex flex-col gap-5">
+            <div className="bg-zinc-950 rounded-3xl border border-white/10 p-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-yellow-300">Flux partenaires</p>
+              <h2 className="mt-2 text-2xl font-black">Maintenance externe</h2>
+              <p className="mt-2 max-w-3xl text-sm text-zinc-400">
+                File interne SL Automotive pour les demandes de maintenance entrantes NovoTralux. Cette étape reste
+                locale : réception, analyse, demande d&apos;infos et préparation de devis sans synchronisation externe
+                pour l&apos;instant.
+              </p>
+            </div>
+
+            <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+              {externalKpis.map((kpi) => (
+                <div key={kpi.label} className="bg-zinc-950 rounded-3xl border border-white/10 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">{kpi.label}</p>
+                  <p className="mt-3 text-2xl font-black text-white">{kpi.value}</p>
+                </div>
+              ))}
+            </section>
+
+            <div className="bg-zinc-950 rounded-3xl border border-white/10 p-4">
+              <div className="flex flex-wrap gap-2">
+                {EXTERNAL_MAINTENANCE_STATUSES.map((status) => (
+                  <span
+                    key={status}
+                    className={`rounded-full px-3 py-1 text-xs font-bold ${externalStatusClass(status)}`}
+                  >
+                    {externalMaintenanceStatusLabel(status)}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <section className="grid gap-4 lg:grid-cols-2">
+              {externalLoading ? (
+                <div className="bg-zinc-950 rounded-3xl border border-white/10 p-6 text-zinc-300">
+                  Chargement de la queue maintenance externe...
+                </div>
+              ) : externalRequests.length === 0 ? (
+                <div className="bg-zinc-950 rounded-3xl border border-white/10 p-6 text-zinc-300">
+                  Aucune demande de maintenance externe reçue pour le moment.
+                </div>
+              ) : (
+                externalRequests.map((request) => {
+                  const latestComment = request.statusHistory[0]?.comment;
+
+                  return (
+                    <article
+                      key={request.id}
+                      className="from-zinc-950 via-zinc-950 rounded-3xl border border-white/10 bg-gradient-to-br to-zinc-900 p-5 transition hover:-translate-y-0.5 hover:border-yellow-300/40"
+                    >
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <div className="flex flex-wrap gap-2">
+                            <span
+                              className={`rounded-full px-3 py-1 text-xs font-bold ${externalStatusClass(
+                                request.status
+                              )}`}
+                            >
+                              {externalMaintenanceStatusLabel(request.status)}
+                            </span>
+                            <span
+                              className={`rounded-full border px-3 py-1 text-xs font-bold ${externalUrgencyClass(
+                                request.urgency
+                              )}`}
+                            >
+                              {externalMaintenanceUrgencyLabel(request.urgency)}
+                            </span>
+                            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-bold text-zinc-300">
+                              {request.sourceCompany}
+                            </span>
+                          </div>
+                          <h2 className="mt-4 text-xl font-black text-white">
+                            {request.plateNumber || "Plaque non renseignée"}
+                          </h2>
+                          <p className="mt-1 text-sm text-zinc-400">
+                            {externalMaintenanceVehicleTypeLabel(request.vehicleType)} ·{" "}
+                            {externalMaintenanceInterventionTypeLabel(request.interventionType)} · Ref{" "}
+                            {request.externalRequestId}
+                          </p>
+                        </div>
+
+                        <div className="text-left sm:text-right">
+                          <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Date souhaitée</p>
+                          <p className="mt-2 text-sm font-semibold text-white">
+                            {request.preferredDate ? formatDate(request.preferredDate) : "À caler"}
+                          </p>
+                          {request.immobilizationRequired && (
+                            <p className="mt-3 rounded-full border border-red-400/30 bg-red-500/10 px-3 py-1 text-xs font-bold text-red-100">
+                              Immobilisation requise
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="mt-5 grid gap-3 text-sm text-zinc-300 sm:grid-cols-2">
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Signalement</p>
+                          <p className="line-clamp-4 mt-1 text-white">{request.issueDescription}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Repères internes</p>
+                          <p className="mt-1 text-white">Kilométrage {formatNumber(request.mileage)} km</p>
+                          <p className="line-clamp-3 mt-1 text-zinc-400">
+                            {request.internalNotes || latestComment || "Aucune note interne."}
+                          </p>
+                        </div>
+                      </div>
+
+                      {request.quoteAmount !== null && request.quoteAmount !== undefined ? (
+                        <div className="mt-4 rounded-2xl border border-yellow-300/20 bg-yellow-300/5 p-4 text-sm">
+                          <p className="font-bold text-yellow-100">Devis : {formatMoney(request.quoteAmount)}</p>
+                          {request.quotePdfUrl ? (
+                            <a
+                              href={request.quotePdfUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-2 inline-block text-yellow-300 underline"
+                            >
+                              Ouvrir le devis
+                            </a>
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      {["UNDER_REVIEW", "QUOTE_PREPARING", "SCHEDULED"].includes(request.status) ? (
+                        <div className="mt-4 grid gap-3 rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <input
+                              className={inputClass}
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              placeholder="Montant du devis (€)"
+                              value={quoteDrafts[request.id]?.amount ?? ""}
+                              onChange={(event) => updateQuoteDraft(request.id, "amount", event.target.value)}
+                            />
+                            <input
+                              className={inputClass}
+                              type="url"
+                              placeholder="URL du devis (optionnel)"
+                              value={quoteDrafts[request.id]?.pdfUrl ?? ""}
+                              onChange={(event) => updateQuoteDraft(request.id, "pdfUrl", event.target.value)}
+                            />
+                          </div>
+                          <input
+                            className={inputClass}
+                            placeholder="Commentaire (optionnel)"
+                            value={quoteDrafts[request.id]?.comment ?? ""}
+                            onChange={(event) => updateQuoteDraft(request.id, "comment", event.target.value)}
+                          />
+                          <button
+                            className={buttonClass}
+                            onClick={() => void sendExternalQuote(request)}
+                            disabled={externalActionId === request.id}
+                          >
+                            {externalActionId === request.id ? "Envoi en cours..." : "Envoyer devis"}
+                          </button>
+                        </div>
+                      ) : null}
+
+                      <div className="mt-5 flex flex-col gap-3 border-t border-white/10 pt-4">
+                        <div className="flex flex-wrap gap-2 text-xs text-zinc-500">
+                          <span>Créée le {formatDate(request.createdAt)}</span>
+                          <span>·</span>
+                          <span>{request.sourceSystem}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            className={ghostButtonClass}
+                            onClick={() =>
+                              quickExternalStatus(
+                                request.id,
+                                "UNDER_REVIEW",
+                                "Pris en analyse par l'atelier SL Automotive."
+                              )
+                            }
+                            disabled={externalActionId === request.id}
+                          >
+                            Passer en analyse
+                          </button>
+                          <button
+                            className={ghostButtonClass}
+                            onClick={() =>
+                              quickExternalStatus(
+                                request.id,
+                                "MORE_INFO_REQUESTED",
+                                "Informations complémentaires demandées au partenaire."
+                              )
+                            }
+                            disabled={externalActionId === request.id}
+                          >
+                            Demander plus d&apos;infos
+                          </button>
+                          <button
+                            className={buttonClass}
+                            onClick={() =>
+                              quickExternalStatus(
+                                request.id,
+                                "QUOTE_PREPARING",
+                                "Demande transmise en préparation de devis."
+                              )
+                            }
+                            disabled={externalActionId === request.id}
+                          >
+                            Préparer devis
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })
+              )}
+            </section>
+          </section>
         )}
 
         {activeTab === "codes" && (
           <section className="flex flex-col gap-5">
-            <div className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-zinc-950 p-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="bg-zinc-950 flex flex-col gap-4 rounded-3xl border border-white/10 p-5 lg:flex-row lg:items-end lg:justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-yellow-300">
-                  Bibliothèque atelier
-                </p>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-yellow-300">Bibliothèque atelier</p>
                 <h2 className="mt-2 text-2xl font-black">Codes intervention</h2>
                 <p className="mt-2 text-sm text-zinc-400">
-                  {codeStats.total} codes · {codeStats.active} actifs ·{" "}
-                  {codeStats.inactive} inactifs
+                  {codeStats.total} codes · {codeStats.active} actifs · {codeStats.inactive} inactifs
                 </p>
               </div>
 
@@ -873,24 +1223,16 @@ export default function GarageDashboard() {
                 <button className={buttonClass} onClick={openNewCodeForm}>
                   Nouveau code
                 </button>
-                <button
-                  className={ghostButtonClass}
-                  onClick={() => seedCodes(false)}
-                  disabled={seeding}
-                >
+                <button className={ghostButtonClass} onClick={() => seedCodes(false)} disabled={seeding}>
                   Initialiser codes standards
                 </button>
-                <button
-                  className={ghostButtonClass}
-                  onClick={() => seedCodes(true)}
-                  disabled={seeding}
-                >
+                <button className={ghostButtonClass} onClick={() => seedCodes(true)} disabled={seeding}>
                   Réinitialiser standards
                 </button>
               </div>
             </div>
 
-            <div className="grid gap-3 rounded-3xl border border-white/10 bg-zinc-950 p-4 lg:grid-cols-[1fr_220px_180px]">
+            <div className="bg-zinc-950 grid gap-3 rounded-3xl border border-white/10 p-4 lg:grid-cols-[1fr_220px_180px]">
               <input
                 className={inputClass}
                 value={codeSearch}
@@ -916,17 +1258,13 @@ export default function GarageDashboard() {
               >
                 {CODE_STATUS_FILTERS.map((status) => (
                   <option key={status} value={status}>
-                    {status === "ALL"
-                      ? "Tous"
-                      : status === "ACTIVE"
-                      ? "Actifs"
-                      : "Inactifs"}
+                    {status === "ALL" ? "Tous" : status === "ACTIVE" ? "Actifs" : "Inactifs"}
                   </option>
                 ))}
               </select>
             </div>
 
-            <div className="overflow-hidden rounded-3xl border border-white/10 bg-zinc-950">
+            <div className="bg-zinc-950 overflow-hidden rounded-3xl border border-white/10">
               <div className="hidden grid-cols-[130px_1.3fr_180px_100px_90px_90px_120px_170px] gap-3 border-b border-white/10 px-5 py-4 text-xs font-bold uppercase tracking-[0.14em] text-zinc-500 xl:grid">
                 <span>Code</span>
                 <span>Libellé</span>
@@ -941,9 +1279,7 @@ export default function GarageDashboard() {
               {codesLoading ? (
                 <div className="p-6 text-sm text-zinc-400">Chargement des codes...</div>
               ) : codes.length === 0 ? (
-                <div className="p-6 text-sm text-zinc-400">
-                  Aucun code ne correspond aux filtres.
-                </div>
+                <div className="p-6 text-sm text-zinc-400">Aucun code ne correspond aux filtres.</div>
               ) : (
                 <div className="divide-y divide-white/5">
                   {codes.map((code) => (
@@ -953,55 +1289,39 @@ export default function GarageDashboard() {
                     >
                       <div>
                         <p className="font-black text-yellow-100">{code.code}</p>
-                        <p className="mt-1 text-xs text-zinc-500 xl:hidden">
-                          Modifié le {formatDate(code.updatedAt)}
-                        </p>
+                        <p className="mt-1 text-xs text-zinc-500 xl:hidden">Modifié le {formatDate(code.updatedAt)}</p>
                       </div>
                       <div>
                         <p className="font-semibold text-white">{code.label}</p>
-                        <p className="mt-1 line-clamp-2 text-xs text-zinc-500">
+                        <p className="line-clamp-2 mt-1 text-xs text-zinc-500">
                           {code.description || "Aucune description"}
                         </p>
                       </div>
                       <p className="text-zinc-300">{code.category}</p>
-                      <p className="font-bold text-yellow-100">
-                        {formatMoney(code.unitPrice)}
-                      </p>
+                      <p className="font-bold text-yellow-100">{formatMoney(code.unitPrice)}</p>
                       <p className="text-zinc-300">{code.defaultQty}</p>
                       <p className="text-zinc-300">
-                        {code.estimatedMinutes !== null &&
-                        code.estimatedMinutes !== undefined
+                        {code.estimatedMinutes !== null && code.estimatedMinutes !== undefined
                           ? `${code.estimatedMinutes} min`
                           : "-"}
                       </p>
                       <span
                         className={`w-fit rounded-full px-3 py-1 text-xs font-bold ${
-                          code.isActive
-                            ? "bg-emerald-400 text-black"
-                            : "bg-white/10 text-zinc-400"
+                          code.isActive ? "bg-emerald-400 text-black" : "bg-white/10 text-zinc-400"
                         }`}
                       >
                         {code.isActive ? "Actif" : "Inactif"}
                       </span>
                       <div className="flex flex-wrap gap-2 xl:justify-end">
-                        <button
-                          className={ghostButtonClass}
-                          onClick={() => openEditCodeForm(code)}
-                        >
+                        <button className={ghostButtonClass} onClick={() => openEditCodeForm(code)}>
                           Modifier
                         </button>
                         {code.isActive ? (
-                          <button
-                            className={ghostButtonClass}
-                            onClick={() => disableCode(code)}
-                          >
+                          <button className={ghostButtonClass} onClick={() => disableCode(code)}>
                             Désactiver
                           </button>
                         ) : (
-                          <button
-                            className={buttonClass}
-                            onClick={() => reactivateCode(code)}
-                          >
+                          <button className={buttonClass} onClick={() => reactivateCode(code)}>
                             Réactiver
                           </button>
                         )}
@@ -1023,12 +1343,8 @@ export default function GarageDashboard() {
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.2em] text-yellow-600">
-                  Code intervention
-                </p>
-                <h2 className="mt-2 text-2xl font-black">
-                  {codeForm.id ? "Modifier le code" : "Nouveau code"}
-                </h2>
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-yellow-600">Code intervention</p>
+                <h2 className="mt-2 text-2xl font-black">{codeForm.id ? "Modifier le code" : "Nouveau code"}</h2>
               </div>
               <button
                 type="button"
@@ -1130,9 +1446,7 @@ export default function GarageDashboard() {
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.2em] text-yellow-600">
-                  Nouvelle demande
-                </p>
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-yellow-600">Nouvelle demande</p>
                 <h2 className="mt-2 text-2xl font-black">Diagnostic garage</h2>
               </div>
               <button

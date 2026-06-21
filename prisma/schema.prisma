@@ -214,6 +214,64 @@ model GarageInterventionLine {
   interventionCode InterventionCode? @relation(fields: [interventionCodeId], references: [id])
 }
 
+model ExternalMaintenanceRequest {
+  id String @id @default(cuid())
+
+  sourceCompany ExternalMaintenanceSourceCompany
+  sourceSystem  String
+
+  externalRequestId String
+  externalVehicleId String?
+
+  vehicleType ExternalMaintenanceVehicleType
+  plateNumber String?
+
+  interventionType ExternalMaintenanceInterventionType
+  urgency          ExternalMaintenanceUrgency          @default(NORMAL)
+  status           ExternalMaintenanceStatus           @default(RECEIVED)
+
+  mileage                Int?
+  immobilizationRequired Boolean   @default(false)
+  preferredDate          DateTime?
+
+  issueDescription String
+  internalNotes    String?
+
+  quoteAmount   Float?
+  invoiceAmount Float?
+
+  quotePdfUrl   String?
+  invoicePdfUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  statusHistory ExternalMaintenanceStatusHistory[]
+
+  @@unique([sourceCompany, externalRequestId])
+  @@index([sourceCompany])
+  @@index([externalRequestId])
+  @@index([status])
+  @@index([plateNumber])
+  @@index([urgency])
+}
+
+model ExternalMaintenanceStatusHistory {
+  id String @id @default(cuid())
+
+  externalMaintenanceRequestId String
+  oldStatus                    ExternalMaintenanceStatus?
+  newStatus                    ExternalMaintenanceStatus
+  comment                      String?
+  createdAt                    DateTime                   @default(now())
+
+  externalMaintenanceRequest ExternalMaintenanceRequest @relation(fields: [externalMaintenanceRequestId], references: [id], onDelete: Cascade)
+
+  @@index([externalMaintenanceRequestId])
+  @@index([newStatus])
+  @@index([createdAt])
+}
+
 enum VehicleInternalStatus {
   NEW
   TO_REVIEW
@@ -250,4 +308,47 @@ enum GarageRequestPriority {
   NORMAL
   HIGH
   URGENT
+}
+
+enum ExternalMaintenanceSourceCompany {
+  NOVOTRALUX
+}
+
+enum ExternalMaintenanceVehicleType {
+  TRUCK
+  TRAILER
+}
+
+enum ExternalMaintenanceInterventionType {
+  DIAGNOSTIC
+  TIRES
+  BRAKES
+  OIL_SERVICE
+  ELECTRICAL
+  BODYWORK
+  TRAILER_REPAIR
+  SAFETY_CHECK
+  OTHER
+}
+
+enum ExternalMaintenanceUrgency {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+enum ExternalMaintenanceStatus {
+  RECEIVED
+  UNDER_REVIEW
+  MORE_INFO_REQUESTED
+  QUOTE_PREPARING
+  QUOTE_SENT
+  QUOTE_APPROVED
+  QUOTE_REJECTED
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  INVOICED
+  CANCELLED
 }
