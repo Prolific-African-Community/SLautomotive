@@ -62,6 +62,9 @@ export default async function handler(
               createdAt: "desc",
             },
           },
+          interventionLines: {
+            orderBy: { createdAt: "asc" },
+          },
         },
       });
 
@@ -101,28 +104,10 @@ export default async function handler(
         where: {
           id,
         },
-        select: {
-          id: true,
-          status: true,
-          sourceCompany: true,
-          sourceSystem: true,
-          externalRequestId: true,
-          externalVehicleId: true,
-          vehicleType: true,
-          plateNumber: true,
-          interventionType: true,
-          urgency: true,
-          mileage: true,
-          immobilizationRequired: true,
-          preferredDate: true,
-          issueDescription: true,
-          internalNotes: true,
-          quoteAmount: true,
-          quotePdfUrl: true,
-          invoiceAmount: true,
-          invoicePdfUrl: true,
-          createdAt: true,
-          updatedAt: true,
+        include: {
+          interventionLines: {
+            orderBy: { createdAt: "asc" },
+          },
         },
       });
 
@@ -135,9 +120,25 @@ export default async function handler(
 
       const isSendQuote = req.body?.action === "send_quote";
       const isSendInvoice = req.body?.action === "send_invoice";
-      const quoteAmount = isSendQuote
+
+      // Compute quote amount: lines total takes precedence over manual amount
+      const linesTotal =
+        existing.interventionLines.length > 0
+          ? Math.round(
+              existing.interventionLines.reduce(
+                (sum, l) => sum + l.total,
+                0
+              ) * 100
+            ) / 100
+          : null;
+
+      const manualQuoteAmount = isSendQuote
         ? parseNumber(req.body?.quoteAmount)
         : null;
+      const quoteAmount = isSendQuote
+        ? (linesTotal !== null ? linesTotal : manualQuoteAmount)
+        : null;
+
       const invoiceAmount = isSendInvoice
         ? parseNumber(req.body?.invoiceAmount)
         : null;
@@ -157,7 +158,7 @@ export default async function handler(
         return res.status(409).json({
           success: false,
           message:
-            "A valid fees amount and an eligible maintenance status are required.",
+            "A valid fees amount (or intervention lines) and an eligible maintenance status are required.",
         });
       }
 
@@ -207,13 +208,53 @@ export default async function handler(
       }
 
       if (isSendInvoice && !resolvedInvoicePdfUrl) {
+        const pdfLines =
+          existing.interventionLines.length > 0
+            ? existing.interventionLines.map((l) => ({
+                code: l.code,
+                label: l.label,
+                description: l.description,
+                qty: l.qty,
+                unitPrice: l.unitPrice,
+                total: l.total,
+              }))
+            : undefined;
         const generatedInvoice = await generateExternalMaintenanceInvoicePdf(
           getRequestOriginFallback(req),
           existing,
           invoiceAmount as number,
-          invoiceStatusComment
+          invoiceStatusComment,
+          pdfLines
         );
         resolvedInvoicePdfUrl = generatedInvoice.absoluteUrl;
+      }
+
+      // For send_quote, generate PDF from lines if available
+      let resolvedQuotePdfUrl: string | null = parseString(req.body?.quotePdfUrl) ?? null;
+      if (isSendQuote && !resolvedQuotePdfUrl) {
+        const pdfLines =
+          existing.interventionLines.length > 0
+            ? existing.interventionLines.map((l) => ({
+                code: l.code,
+                label: l.label,
+                description: l.description,
+                qty: l.qty,
+                unitPrice: l.unitPrice,
+                total: l.total,
+              }))
+            : undefined;
+        try {
+          const generatedQuote = await generateExternalMaintenanceInvoicePdf(
+            getRequestOriginFallback(req),
+            existing,
+            quoteAmount as number,
+            parseString(req.body?.statusComment) ?? null,
+            pdfLines
+          );
+          resolvedQuotePdfUrl = generatedQuote.absoluteUrl;
+        } catch (pdfError) {
+          console.warn("send_quote PDF generation failed, continuing without PDF:", pdfError);
+        }
       }
 
       const patch = isSendInvoice
@@ -229,7 +270,7 @@ export default async function handler(
         ? {
             data: {
               quoteAmount: quoteAmount as number,
-              quotePdfUrl: parseString(req.body?.quotePdfUrl) ?? null,
+              quotePdfUrl: resolvedQuotePdfUrl,
             },
             status: ExternalMaintenanceStatus.QUOTE_SENT,
             statusComment:
@@ -269,6 +310,9 @@ export default async function handler(
               orderBy: {
                 createdAt: "desc",
               },
+            },
+            interventionLines: {
+              orderBy: { createdAt: "asc" },
             },
           },
         });

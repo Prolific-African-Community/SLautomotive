@@ -191,7 +191,8 @@ model InterventionCode {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  lines GarageInterventionLine[]
+  lines         GarageInterventionLine[]
+  externalLines ExternalMaintenanceInterventionLine[]
 }
 
 model GarageInterventionLine {
@@ -248,6 +249,7 @@ model ExternalMaintenanceRequest {
 
   statusHistory     ExternalMaintenanceStatusHistory[]
   webhookDeliveries ExternalMaintenanceWebhookDelivery[]
+  interventionLines ExternalMaintenanceInterventionLine[]
 
   @@unique([sourceCompany, externalRequestId])
   @@index([sourceCompany])
@@ -255,6 +257,28 @@ model ExternalMaintenanceRequest {
   @@index([status])
   @@index([plateNumber])
   @@index([urgency])
+}
+
+model ExternalMaintenanceInterventionLine {
+  id String @id @default(cuid())
+
+  externalMaintenanceRequestId String
+  interventionCodeId           String?
+
+  code        String?
+  label       String
+  description String?
+  qty         Float   @default(1)
+  unitPrice   Float
+  total       Float
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  externalMaintenanceRequest ExternalMaintenanceRequest @relation(fields: [externalMaintenanceRequestId], references: [id], onDelete: Cascade)
+  interventionCode           InterventionCode?          @relation(fields: [interventionCodeId], references: [id])
+
+  @@index([externalMaintenanceRequestId])
 }
 
 model ExternalMaintenanceStatusHistory {

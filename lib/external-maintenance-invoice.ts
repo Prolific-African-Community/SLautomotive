@@ -21,6 +21,15 @@ export type ExternalMaintenanceInvoiceRequestData = Pick<
   | "issueDescription"
 >;
 
+export type ExternalMaintenanceInvoiceLine = {
+  code?: string | null;
+  label: string;
+  description?: string | null;
+  qty: number;
+  unitPrice: number;
+  total: number;
+};
+
 type RenderedExternalMaintenanceInvoicePdf = {
   buffer: Buffer;
   fileName: string;
@@ -100,10 +109,56 @@ function writeLine(
   doc.moveDown(options?.gap ?? 0.25);
 }
 
+const COL = { code: 50, desc: 190, qty: 50, price: 70, total: 70 };
+
+function drawTableHeader(
+  doc: InstanceType<typeof PDFDocument>,
+  x: number,
+  y: number,
+  w: number
+) {
+  doc.fillColor("#111111").rect(x, y, w, 20).fill();
+  doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(8.5);
+  doc.text("Code", x + 4, y + 6, { width: COL.code, lineBreak: false });
+  doc.text("Description", x + 4 + COL.code, y + 6, { width: COL.desc, lineBreak: false });
+  doc.text("Qté", x + 4 + COL.code + COL.desc, y + 6, { width: COL.qty, align: "right", lineBreak: false });
+  doc.text("P.U.", x + 4 + COL.code + COL.desc + COL.qty, y + 6, { width: COL.price, align: "right", lineBreak: false });
+  doc.text("Total", x + 4 + COL.code + COL.desc + COL.qty + COL.price, y + 6, { width: COL.total, align: "right", lineBreak: false });
+}
+
+function drawTableRow(
+  doc: InstanceType<typeof PDFDocument>,
+  x: number,
+  y: number,
+  w: number,
+  line: ExternalMaintenanceInvoiceLine,
+  shade: boolean
+) {
+  if (shade) {
+    doc.fillColor("#f5f5f5").rect(x, y, w, 22).fill();
+  }
+
+  doc.fillColor("#111111").font("Helvetica").fontSize(8.5);
+  doc.text(line.code || "-", x + 4, y + 6, { width: COL.code, lineBreak: false });
+
+  const labelDesc = line.description ? `${line.label}\n${line.description}` : line.label;
+  const rowH = line.description ? 28 : 22;
+
+  doc.text(labelDesc, x + 4 + COL.code, y + 6, { width: COL.desc - 4, lineBreak: true, height: rowH });
+  doc.text(String(line.qty), x + 4 + COL.code + COL.desc, y + 6, { width: COL.qty, align: "right", lineBreak: false });
+  doc.text(formatMoney(line.unitPrice), x + 4 + COL.code + COL.desc + COL.qty, y + 6, { width: COL.price, align: "right", lineBreak: false });
+  doc.text(formatMoney(line.total), x + 4 + COL.code + COL.desc + COL.qty + COL.price, y + 6, { width: COL.total, align: "right", lineBreak: false });
+
+  doc.strokeColor("#dddddd").lineWidth(0.5).moveTo(x, y + rowH).lineTo(x + w, y + rowH).stroke();
+
+  return rowH;
+}
+
 export async function renderExternalMaintenanceInvoicePdfBuffer(
   request: ExternalMaintenanceInvoiceRequestData,
   invoiceAmount: number,
-  statusComment?: string | null
+  statusComment?: string | null,
+  lines?: ExternalMaintenanceInvoiceLine[]
 ): Promise<RenderedExternalMaintenanceInvoicePdf> {
   const invoiceReference = buildInvoiceReference(request);
   const fileName = `${invoiceReference}-${slugify(
@@ -130,28 +185,33 @@ export async function renderExternalMaintenanceInvoicePdfBuffer(
     });
     doc.on("error", reject);
 
+    const pageW = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    const marginLeft = doc.page.margins.left;
+
+    // Header
     doc
       .font("Helvetica-Bold")
-      .fontSize(20)
+      .fontSize(22)
       .fillColor("#111111")
-      .text("SL Automotive");
+      .text("SL Automotive", marginLeft, 50, { lineBreak: false });
 
     doc
-      .moveDown(0.4)
       .font("Helvetica-Bold")
-      .fontSize(18)
-      .text("Frais d'intervention");
+      .fontSize(15)
+      .fillColor("#111111")
+      .text("Frais d'intervention", marginLeft, 78);
 
-    doc.moveDown(1);
+    doc.moveDown(0.8);
 
-    writeLine(doc, "Référence frais : ", invoiceReference, { boldValue: true });
+    // Meta block
+    writeLine(doc, "Référence : ", invoiceReference, { boldValue: true });
     writeLine(doc, "Date : ", formatDate(invoiceDate));
     writeLine(doc, "Client : ", "NovoTralux");
     writeLine(doc, "Plaque véhicule : ", request.plateNumber || "-");
     writeLine(doc, "Type véhicule : ", request.vehicleType);
     writeLine(doc, "Type d'intervention : ", request.interventionType);
-    writeLine(doc, "SL request id : ", request.id);
-    writeLine(doc, "NovoTralux request id : ", request.externalRequestId);
+    writeLine(doc, "Réf. SL : ", request.id);
+    writeLine(doc, "Réf. NovoTralux : ", request.externalRequestId);
 
     doc.moveDown(0.6);
     doc.font("Helvetica-Bold").fontSize(11).text("Signalement");
@@ -159,24 +219,43 @@ export async function renderExternalMaintenanceInvoicePdfBuffer(
       .moveDown(0.3)
       .font("Helvetica")
       .fontSize(10)
-      .text(request.issueDescription || "-", {
-        lineGap: 3,
-      });
+      .text(request.issueDescription || "-", { lineGap: 3 });
 
     doc.moveDown(1);
 
-    doc.font("Helvetica-Bold").fontSize(11).text("Montant des frais acceptés");
+    if (lines && lines.length > 0) {
+      doc.font("Helvetica-Bold").fontSize(11).fillColor("#111111").text("Codes d'intervention");
+      doc.moveDown(0.4);
+
+      const tableX = marginLeft;
+      const tableW = pageW;
+      let curY = doc.y;
+
+      drawTableHeader(doc, tableX, curY, tableW);
+      curY += 20;
+
+      lines.forEach((line, idx) => {
+        const rowH = drawTableRow(doc, tableX, curY, tableW, line, idx % 2 === 0);
+        curY += rowH;
+      });
+
+      doc.moveDown(0.3);
+      doc.y = curY + 8;
+    }
+
+    // Total
+    doc.font("Helvetica-Bold").fontSize(12).fillColor("#111111").text("Total frais");
     doc
       .moveDown(0.3)
       .font("Helvetica-Bold")
-      .fontSize(16)
+      .fontSize(18)
       .fillColor("#0f766e")
       .text(formatMoney(invoiceAmount));
 
     doc.fillColor("#111111");
 
     if (statusComment) {
-      doc.moveDown(1);
+      doc.moveDown(0.8);
       doc.font("Helvetica-Bold").fontSize(11).text("Notes");
       doc
         .moveDown(0.3)
@@ -185,13 +264,25 @@ export async function renderExternalMaintenanceInvoicePdfBuffer(
         .text(statusComment, { lineGap: 3 });
     }
 
+    // Payment instructions
+    doc.moveDown(1.2);
+    doc.font("Helvetica-Bold").fontSize(11).fillColor("#111111").text("Instructions de paiement");
+    doc.moveDown(0.3);
+    doc
+      .font("Helvetica")
+      .fontSize(10)
+      .text("STANLEY ARTHUR LISHOU")
+      .text("IBAN : FR802043302626N261441545654")
+      .text("BIC : NTSBFRM1XXX")
+      .text("Paiement sous 10 jours");
+
     doc.moveDown(2);
     doc
       .font("Helvetica")
       .fontSize(9)
       .fillColor("#555555")
       .text(
-        "Document des frais généré automatiquement par SL Automotive après acceptation par NovoTralux."
+        "Document généré automatiquement par SL Automotive."
       );
 
     doc.end();
@@ -256,12 +347,14 @@ export async function generateExternalMaintenanceInvoicePdf(
   requestOriginFallback: string | null,
   request: ExternalMaintenanceInvoiceRequestData,
   invoiceAmount: number,
-  statusComment?: string | null
+  statusComment?: string | null,
+  lines?: ExternalMaintenanceInvoiceLine[]
 ) {
   const renderedInvoice = await renderExternalMaintenanceInvoicePdfBuffer(
     request,
     invoiceAmount,
-    statusComment
+    statusComment,
+    lines
   );
 
   const storedInvoice = await storeExternalMaintenanceInvoicePdf(

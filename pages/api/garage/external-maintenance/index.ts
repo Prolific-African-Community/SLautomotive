@@ -38,6 +38,9 @@ export default async function handler(
             },
             take: 1,
           },
+          interventionLines: {
+            orderBy: { createdAt: "asc" },
+          },
         },
       });
 

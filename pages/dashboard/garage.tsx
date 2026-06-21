@@ -69,6 +69,17 @@ type ExternalMaintenanceWebhookDelivery = {
   createdAt: string;
 };
 
+type ExternalMaintenanceInterventionLine = {
+  id: string;
+  interventionCodeId?: string | null;
+  code?: string | null;
+  label: string;
+  description?: string | null;
+  qty: number;
+  unitPrice: number;
+  total: number;
+};
+
 type ExternalMaintenanceRequest = {
   id: string;
   sourceCompany: string;
@@ -93,6 +104,7 @@ type ExternalMaintenanceRequest = {
   updatedAt: string;
   statusHistory: ExternalMaintenanceStatusHistory[];
   webhookDeliveries: ExternalMaintenanceWebhookDelivery[];
+  interventionLines: ExternalMaintenanceInterventionLine[];
 };
 
 type RequestForm = {
@@ -352,6 +364,20 @@ export default function GarageDashboard() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Intervention lines editor state (keyed by externalMaintenanceRequest id)
+  type DraftLine = {
+    _key: string;
+    interventionCodeId: string | null;
+    code: string;
+    label: string;
+    description: string;
+    qty: string;
+    unitPrice: string;
+  };
+  const [draftLines, setDraftLines] = useState<Record<string, DraftLine[]>>({});
+  const [savingLines, setSavingLines] = useState(false);
+  const [codeSearch2, setCodeSearch2] = useState("");
+
   function updateForm<K extends keyof RequestForm>(key: K, value: RequestForm[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
@@ -607,10 +633,11 @@ export default function GarageDashboard() {
 
   async function sendExternalQuote(request: ExternalMaintenanceRequest) {
     const draft = quoteDrafts[request.id];
+    const hasLines = (request.interventionLines?.length ?? 0) > 0;
     const quoteAmount = Number(draft?.amount);
 
-    if (!draft?.amount.trim() || !Number.isFinite(quoteAmount) || quoteAmount < 0) {
-      setError("Le montant des frais est obligatoire et doit être valide.");
+    if (!hasLines && (!draft?.amount.trim() || !Number.isFinite(quoteAmount) || quoteAmount < 0)) {
+      setError("Ajoutez des lignes d'intervention ou saisissez un montant de frais valide.");
       return;
     }
 
@@ -623,8 +650,8 @@ export default function GarageDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "send_quote",
-          quoteAmount,
-          statusComment: draft.comment.trim() || null,
+          quoteAmount: hasLines ? 0 : quoteAmount,
+          statusComment: draft?.comment?.trim() || null,
         }),
       });
       setMessage("Frais proposés à NovoTralux.");
@@ -709,6 +736,90 @@ export default function GarageDashboard() {
     }
   }
 
+  function initDraftLines(requestId: string, lines: ExternalMaintenanceInterventionLine[]) {
+    setDraftLines((prev) => ({
+      ...prev,
+      [requestId]: lines.map((l) => ({
+        _key: l.id,
+        interventionCodeId: l.interventionCodeId ?? null,
+        code: l.code ?? "",
+        label: l.label,
+        description: l.description ?? "",
+        qty: String(l.qty),
+        unitPrice: String(l.unitPrice),
+      })),
+    }));
+  }
+
+  function addDraftLine(requestId: string, code?: InterventionCode) {
+    const key = `new-${Date.now()}-${Math.random()}`;
+    const newLine: DraftLine = {
+      _key: key,
+      interventionCodeId: code?.id ?? null,
+      code: code?.code ?? "",
+      label: code?.label ?? "",
+      description: code?.description ?? "",
+      qty: String(code?.defaultQty ?? 1),
+      unitPrice: String(code?.unitPrice ?? 0),
+    };
+    setDraftLines((prev) => ({
+      ...prev,
+      [requestId]: [...(prev[requestId] ?? []), newLine],
+    }));
+  }
+
+  function updateDraftLine(requestId: string, key: string, field: keyof DraftLine, value: string) {
+    setDraftLines((prev) => ({
+      ...prev,
+      [requestId]: (prev[requestId] ?? []).map((l) =>
+        l._key === key ? { ...l, [field]: value } : l
+      ),
+    }));
+  }
+
+  function removeDraftLine(requestId: string, key: string) {
+    setDraftLines((prev) => ({
+      ...prev,
+      [requestId]: (prev[requestId] ?? []).filter((l) => l._key !== key),
+    }));
+  }
+
+  async function saveDraftLines(requestId: string) {
+    const lines = (draftLines[requestId] ?? []).map((l) => ({
+      interventionCodeId: l.interventionCodeId || null,
+      code: l.code.trim() || null,
+      label: l.label.trim(),
+      description: l.description.trim() || null,
+      qty: Number(l.qty),
+      unitPrice: Number(l.unitPrice),
+    }));
+
+    const invalid = lines.find(
+      (l) => !l.label || !Number.isFinite(l.qty) || l.qty <= 0 || !Number.isFinite(l.unitPrice) || l.unitPrice < 0
+    );
+    if (invalid) {
+      setError("Chaque ligne doit avoir un libellé, une quantité > 0 et un prix unitaire >= 0.");
+      return;
+    }
+
+    try {
+      setSavingLines(true);
+      setError(null);
+      setMessage(null);
+      await fetchJson(`/api/garage/external-maintenance/${requestId}/lines`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lines }),
+      });
+      setMessage("Lignes d'intervention sauvegardées.");
+      await loadExternalRequests();
+    } catch (err: any) {
+      setError(err?.message || "Impossible de sauvegarder les lignes.");
+    } finally {
+      setSavingLines(false);
+    }
+  }
+
   useEffect(() => {
     loadRequests();
   }, []);
@@ -716,6 +827,7 @@ export default function GarageDashboard() {
   useEffect(() => {
     if (activeTab !== "external") return;
     loadExternalRequests();
+    if (codes.length === 0) loadCodes();
   }, [activeTab]);
 
   useEffect(() => {
@@ -1086,11 +1198,17 @@ export default function GarageDashboard() {
                       onClick={() => {
                         if (selectedExternalRequestId !== request.id) {
                           setSelectedExternalRequestId(request.id);
+                          if (!draftLines[request.id]) {
+                            initDraftLines(request.id, request.interventionLines ?? []);
+                          }
                         }
                       }}
                       onKeyDown={(event) => {
                         if (selectedExternalRequestId !== request.id && (event.key === "Enter" || event.key === " ")) {
                           setSelectedExternalRequestId(request.id);
+                          if (!draftLines[request.id]) {
+                            initDraftLines(request.id, request.interventionLines ?? []);
+                          }
                         }
                       }}
                       className={
@@ -1239,6 +1357,153 @@ export default function GarageDashboard() {
                             </div>
                           </div>
 
+                          {/* Intervention lines editor */}
+                          {(() => {
+                            const requestDraftLines = draftLines[request.id] ?? [];
+                            const linesTotal = requestDraftLines.reduce((sum, l) => {
+                              const qty = Number(l.qty);
+                              const price = Number(l.unitPrice);
+                              return sum + (Number.isFinite(qty) && Number.isFinite(price) ? qty * price : 0);
+                            }, 0);
+                            const filteredCodes = codes.filter((c) => {
+                              if (!c.isActive) return false;
+                              if (!codeSearch2.trim()) return true;
+                              const term = codeSearch2.toLowerCase();
+                              return (
+                                c.code.toLowerCase().includes(term) ||
+                                c.label.toLowerCase().includes(term) ||
+                                c.category.toLowerCase().includes(term)
+                              );
+                            });
+
+                            return (
+                              <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                                <p className="text-xs font-bold uppercase tracking-[0.14em] text-zinc-500">
+                                  Codes d&apos;intervention
+                                </p>
+
+                                {requestDraftLines.length > 0 && (
+                                  <div className="mt-3 space-y-2">
+                                    {requestDraftLines.map((line) => (
+                                      <div key={line._key} className="grid gap-2 rounded-xl border border-white/10 bg-black/30 p-3 sm:grid-cols-[1fr_1fr_80px_80px_36px]">
+                                        <input
+                                          className={inputClass}
+                                          placeholder="Libellé *"
+                                          value={line.label}
+                                          onChange={(e) => updateDraftLine(request.id, line._key, "label", e.target.value)}
+                                        />
+                                        <input
+                                          className={inputClass}
+                                          placeholder="Description"
+                                          value={line.description}
+                                          onChange={(e) => updateDraftLine(request.id, line._key, "description", e.target.value)}
+                                        />
+                                        <input
+                                          className={inputClass}
+                                          placeholder="Qté"
+                                          inputMode="decimal"
+                                          value={line.qty}
+                                          onChange={(e) => updateDraftLine(request.id, line._key, "qty", e.target.value)}
+                                        />
+                                        <input
+                                          className={inputClass}
+                                          placeholder="P.U. €"
+                                          inputMode="decimal"
+                                          value={line.unitPrice}
+                                          onChange={(e) => updateDraftLine(request.id, line._key, "unitPrice", e.target.value)}
+                                        />
+                                        <button
+                                          type="button"
+                                          className="flex h-full items-center justify-center rounded-xl border border-red-400/30 bg-red-500/10 text-red-300 transition hover:bg-red-500/20"
+                                          onClick={() => removeDraftLine(request.id, line._key)}
+                                        >
+                                          ✕
+                                        </button>
+                                        {line.code && (
+                                          <span className="col-span-full text-xs text-zinc-500">{line.code}</span>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {requestDraftLines.length === 0 && (
+                                  <p className="mt-2 text-xs text-zinc-600">Aucune ligne. Ajoutez un code ou une ligne libre.</p>
+                                )}
+
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    className={ghostButtonClass}
+                                    onClick={() => addDraftLine(request.id)}
+                                  >
+                                    + Ligne libre
+                                  </button>
+                                  {codes.length > 0 && (
+                                    <div className="flex flex-1 flex-wrap gap-2">
+                                      <input
+                                        className={`${inputClass} min-w-[160px] flex-1`}
+                                        placeholder="Recherche code..."
+                                        value={codeSearch2}
+                                        onChange={(e) => setCodeSearch2(e.target.value)}
+                                        onClick={(e) => e.stopPropagation()}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+
+                                {codeSearch2.trim() && filteredCodes.length > 0 && (
+                                  <div className="mt-2 max-h-48 overflow-y-auto rounded-xl border border-white/10 bg-black">
+                                    {filteredCodes.slice(0, 20).map((code) => (
+                                      <button
+                                        key={code.id}
+                                        type="button"
+                                        className="flex w-full items-center justify-between gap-2 border-b border-white/5 px-3 py-2 text-left text-xs transition hover:bg-white/[0.06]"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          addDraftLine(request.id, code);
+                                          setCodeSearch2("");
+                                        }}
+                                      >
+                                        <span className="font-bold text-yellow-100">{code.code}</span>
+                                        <span className="flex-1 truncate text-zinc-300">{code.label}</span>
+                                        <span className="text-zinc-400">{formatMoney(code.unitPrice)}</span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {requestDraftLines.length > 0 && (
+                                  <div className="mt-3 flex items-center justify-between gap-3 border-t border-white/10 pt-3">
+                                    <p className="text-sm font-bold text-yellow-200">
+                                      Total : {formatMoney(linesTotal)}
+                                    </p>
+                                    <button
+                                      type="button"
+                                      className={buttonClass}
+                                      onClick={() => void saveDraftLines(request.id)}
+                                      disabled={savingLines}
+                                    >
+                                      {savingLines ? "Sauvegarde..." : "Sauvegarder les lignes"}
+                                    </button>
+                                  </div>
+                                )}
+                                {requestDraftLines.length === 0 && (
+                                  <div className="mt-3 flex justify-end">
+                                    <button
+                                      type="button"
+                                      className={buttonClass}
+                                      onClick={() => void saveDraftLines(request.id)}
+                                      disabled={savingLines}
+                                    >
+                                      {savingLines ? "Sauvegarde..." : "Vider les lignes"}
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+
                           {request.quoteAmount !== null ||
                           request.invoiceAmount !== null ||
                           request.quotePdfUrl ||
@@ -1262,15 +1527,23 @@ export default function GarageDashboard() {
 
                           {["UNDER_REVIEW", "QUOTE_PREPARING", "SCHEDULED"].includes(request.status) ? (
                             <div className="mt-4 grid gap-3 rounded-2xl border border-white/10 bg-black/20 p-4">
-                              <input
-                                className={inputClass}
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                placeholder="Montant des frais (€)"
-                                value={quoteDrafts[request.id]?.amount ?? ""}
-                                onChange={(event) => updateQuoteDraft(request.id, "amount", event.target.value)}
-                              />
+                              {(request.interventionLines?.length ?? 0) > 0 ? (
+                                <p className="text-xs text-zinc-400">
+                                  Total calculé depuis les lignes : <strong className="text-yellow-200">{formatMoney(
+                                    (request.interventionLines ?? []).reduce((s, l) => s + l.total, 0)
+                                  )}</strong>
+                                </p>
+                              ) : (
+                                <input
+                                  className={inputClass}
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  placeholder="Montant des frais (€) — obligatoire sans lignes"
+                                  value={quoteDrafts[request.id]?.amount ?? ""}
+                                  onChange={(event) => updateQuoteDraft(request.id, "amount", event.target.value)}
+                                />
+                              )}
                               <input
                                 className={inputClass}
                                 placeholder="Commentaire (optionnel)"
