@@ -1059,7 +1059,7 @@ export default function GarageDashboard() {
               <button
                 type="button"
                 aria-label="Fermer le détail"
-                className="fixed inset-0 z-[70] bg-black/75"
+                className="fixed inset-0 z-[70] bg-black/95 backdrop-blur-sm"
                 onClick={() => setSelectedExternalRequestId(null)}
               />
             ) : null}
@@ -1095,7 +1095,7 @@ export default function GarageDashboard() {
                       }}
                       className={
                         selectedExternalRequestId === request.id
-                          ? "bg-zinc-950 fixed inset-x-4 top-6 z-[80] mx-auto max-h-[calc(100vh-3rem)] max-w-4xl overflow-y-auto rounded-3xl border border-yellow-300/30 p-5 shadow-2xl sm:p-7"
+                          ? "fixed inset-x-4 top-6 z-[80] mx-auto max-h-[calc(100vh-3rem)] max-w-4xl overflow-y-auto rounded-3xl border border-yellow-300/30 bg-black p-5 text-white shadow-2xl shadow-black/80 sm:p-7"
                           : "bg-zinc-950 grid cursor-pointer grid-cols-2 items-center gap-3 rounded-2xl border border-white/10 px-4 py-3 transition hover:border-yellow-300/40 sm:grid-cols-4 lg:grid-cols-[1.1fr_0.8fr_1fr_1fr_0.8fr_1fr_1fr_1fr_0.9fr]"
                       }
                     >
