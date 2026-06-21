@@ -60,6 +60,15 @@ type ExternalMaintenanceStatusHistory = {
   createdAt: string;
 };
 
+type ExternalMaintenanceWebhookDelivery = {
+  id: string;
+  status: "PENDING" | "DELIVERED" | "FAILED";
+  attempts: number;
+  httpStatus?: number | null;
+  errorMessage?: string | null;
+  createdAt: string;
+};
+
 type ExternalMaintenanceRequest = {
   id: string;
   sourceCompany: string;
@@ -83,6 +92,7 @@ type ExternalMaintenanceRequest = {
   createdAt: string;
   updatedAt: string;
   statusHistory: ExternalMaintenanceStatusHistory[];
+  webhookDeliveries: ExternalMaintenanceWebhookDelivery[];
 };
 
 type RequestForm = {
@@ -565,6 +575,25 @@ export default function GarageDashboard() {
       await loadExternalRequests();
     } catch (err: any) {
       setError(err?.message || "Mise à jour maintenance externe impossible.");
+    } finally {
+      setExternalActionId(null);
+    }
+  }
+
+  async function retryExternalWebhook(requestId: string, deliveryId: string) {
+    try {
+      setExternalActionId(requestId);
+      setError(null);
+      setMessage(null);
+      await fetchJson<ExternalMaintenanceWebhookDelivery>(
+        `/api/garage/external-maintenance/webhook-deliveries/${deliveryId}/retry`,
+        { method: "POST" }
+      );
+      setMessage("Synchronisation NovoTralux réessayée avec succès.");
+      await loadExternalRequests();
+    } catch (err: any) {
+      setError(err?.message || "Nouvelle tentative de synchronisation impossible.");
+      await loadExternalRequests();
     } finally {
       setExternalActionId(null);
     }
@@ -1092,6 +1121,7 @@ export default function GarageDashboard() {
               ) : (
                 externalRequests.map((request) => {
                   const latestComment = request.statusHistory[0]?.comment;
+                  const latestDelivery = request.webhookDeliveries[0];
 
                   return (
                     <article
@@ -1118,6 +1148,24 @@ export default function GarageDashboard() {
                             <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-bold text-zinc-300">
                               {request.sourceCompany}
                             </span>
+                            {latestDelivery ? (
+                              <span
+                                className={[
+                                  "rounded-full border px-3 py-1 text-xs font-bold",
+                                  latestDelivery.status === "DELIVERED"
+                                    ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
+                                    : latestDelivery.status === "FAILED"
+                                    ? "border-red-400/30 bg-red-500/10 text-red-200"
+                                    : "border-amber-300/30 bg-amber-400/10 text-amber-100",
+                                ].join(" ")}
+                              >
+                                {latestDelivery.status === "DELIVERED"
+                                  ? "Synchronisé"
+                                  : latestDelivery.status === "FAILED"
+                                  ? "Échec synchro"
+                                  : "En attente"}
+                              </span>
+                            ) : null}
                           </div>
                           <h2 className="mt-4 text-xl font-black text-white">
                             {request.plateNumber || "Plaque non renseignée"}
@@ -1273,6 +1321,15 @@ export default function GarageDashboard() {
                           <span>{request.sourceSystem}</span>
                         </div>
                         <div className="flex flex-wrap gap-2">
+                          {latestDelivery?.status === "FAILED" ? (
+                            <button
+                              className={ghostButtonClass}
+                              onClick={() => void retryExternalWebhook(request.id, latestDelivery.id)}
+                              disabled={externalActionId === request.id}
+                            >
+                              Réessayer synchro
+                            </button>
+                          ) : null}
                           <button
                             className={ghostButtonClass}
                             onClick={() =>

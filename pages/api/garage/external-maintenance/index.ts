@@ -23,6 +23,12 @@ export default async function handler(
               createdAt: "desc",
             },
           },
+          webhookDeliveries: {
+            orderBy: {
+              createdAt: "desc",
+            },
+            take: 1,
+          },
         },
       });
 

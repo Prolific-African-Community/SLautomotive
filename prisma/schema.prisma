@@ -246,7 +246,8 @@ model ExternalMaintenanceRequest {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  statusHistory ExternalMaintenanceStatusHistory[]
+  statusHistory     ExternalMaintenanceStatusHistory[]
+  webhookDeliveries ExternalMaintenanceWebhookDelivery[]
 
   @@unique([sourceCompany, externalRequestId])
   @@index([sourceCompany])
@@ -269,6 +270,31 @@ model ExternalMaintenanceStatusHistory {
 
   @@index([externalMaintenanceRequestId])
   @@index([newStatus])
+  @@index([createdAt])
+}
+
+model ExternalMaintenanceWebhookDelivery {
+  id String @id @default(cuid())
+
+  externalMaintenanceRequestId String
+  targetSystem                 ExternalMaintenanceWebhookTarget         @default(NOVOTRALUX)
+  eventType                    String
+  payloadJson                  Json
+  status                       ExternalMaintenanceWebhookDeliveryStatus @default(PENDING)
+  httpStatus                   Int?
+  responseBody                 String?
+  errorMessage                 String?
+  attempts                     Int                                      @default(0)
+  lastAttemptAt                DateTime?
+  deliveredAt                  DateTime?
+  createdAt                    DateTime                                 @default(now())
+  updatedAt                    DateTime                                 @updatedAt
+
+  externalMaintenanceRequest ExternalMaintenanceRequest @relation(fields: [externalMaintenanceRequestId], references: [id], onDelete: Cascade)
+
+  @@index([externalMaintenanceRequestId])
+  @@index([status])
+  @@index([targetSystem])
   @@index([createdAt])
 }
 
@@ -351,4 +377,14 @@ enum ExternalMaintenanceStatus {
   COMPLETED
   INVOICED
   CANCELLED
+}
+
+enum ExternalMaintenanceWebhookTarget {
+  NOVOTRALUX
+}
+
+enum ExternalMaintenanceWebhookDeliveryStatus {
+  PENDING
+  DELIVERED
+  FAILED
 }
