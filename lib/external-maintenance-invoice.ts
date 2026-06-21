@@ -1,5 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
+import { put } from "@vercel/blob";
 import PDFDocument from "pdfkit";
 import type { ExternalMaintenanceRequest } from "@prisma/client";
 
@@ -19,6 +20,13 @@ export type ExternalMaintenanceInvoiceRequestData = Pick<
   | "interventionType"
   | "issueDescription"
 >;
+
+type RenderedExternalMaintenanceInvoicePdf = {
+  buffer: Buffer;
+  fileName: string;
+  invoiceReference: string;
+  publicPath: string;
+};
 
 function formatDate(date: Date) {
   return new Intl.DateTimeFormat("fr-LU", {
@@ -92,26 +100,19 @@ function writeLine(
   doc.moveDown(options?.gap ?? 0.25);
 }
 
-export async function generateExternalMaintenanceInvoicePdf(
-  requestOriginFallback: string | null,
+export async function renderExternalMaintenanceInvoicePdfBuffer(
   request: ExternalMaintenanceInvoiceRequestData,
   invoiceAmount: number,
   statusComment?: string | null
-) {
-  await fs.mkdir(GENERATED_INVOICE_DIR, { recursive: true });
-
+) : Promise<RenderedExternalMaintenanceInvoicePdf> {
   const invoiceReference = buildInvoiceReference(request);
   const fileName = `${invoiceReference}-${slugify(
     request.plateNumber || request.externalRequestId || request.id
   )}.pdf`;
-  const filePath = path.join(GENERATED_INVOICE_DIR, fileName);
   const publicPath = `/generated/invoices/${fileName}`;
-  const absoluteUrl = `${resolveSlAutomotivePublicBaseUrl(
-    requestOriginFallback
-  )}${publicPath}`;
   const invoiceDate = new Date();
 
-  await new Promise<void>((resolve, reject) => {
+  const buffer = await new Promise<Buffer>((resolve, reject) => {
     const doc = new PDFDocument({
       size: "A4",
       margin: 50,
@@ -122,8 +123,7 @@ export async function generateExternalMaintenanceInvoicePdf(
     doc.on("data", (chunk) => chunks.push(chunk));
     doc.on("end", async () => {
       try {
-        await fs.writeFile(filePath, Buffer.concat(chunks));
-        resolve();
+        resolve(Buffer.concat(chunks));
       } catch (error) {
         reject(error);
       }
@@ -204,10 +204,71 @@ export async function generateExternalMaintenanceInvoicePdf(
   });
 
   return {
-    invoiceReference,
+    buffer,
     fileName,
-    filePath,
+    invoiceReference,
     publicPath,
-    absoluteUrl,
+  };
+}
+
+export async function storeExternalMaintenanceInvoicePdf(
+  requestOriginFallback: string | null,
+  renderedInvoice: RenderedExternalMaintenanceInvoicePdf
+) {
+  if (process.env.BLOB_READ_WRITE_TOKEN?.trim()) {
+    const blob = await put(
+      `external-maintenance/invoices/${renderedInvoice.fileName}`,
+      renderedInvoice.buffer,
+      {
+        access: "public",
+        addRandomSuffix: false,
+        contentType: "application/pdf",
+      }
+    );
+
+    return {
+      storage: "blob" as const,
+      fileName: renderedInvoice.fileName,
+      invoiceReference: renderedInvoice.invoiceReference,
+      publicPath: renderedInvoice.publicPath,
+      absoluteUrl: blob.url,
+    };
+  }
+
+  await fs.mkdir(GENERATED_INVOICE_DIR, { recursive: true });
+  const filePath = path.join(GENERATED_INVOICE_DIR, renderedInvoice.fileName);
+  await fs.writeFile(filePath, renderedInvoice.buffer);
+
+  return {
+    storage: "local" as const,
+    fileName: renderedInvoice.fileName,
+    filePath,
+    invoiceReference: renderedInvoice.invoiceReference,
+    publicPath: renderedInvoice.publicPath,
+    absoluteUrl: `${resolveSlAutomotivePublicBaseUrl(
+      requestOriginFallback
+    )}${renderedInvoice.publicPath}`,
+  };
+}
+
+export async function generateExternalMaintenanceInvoicePdf(
+  requestOriginFallback: string | null,
+  request: ExternalMaintenanceInvoiceRequestData,
+  invoiceAmount: number,
+  statusComment?: string | null
+) {
+  const renderedInvoice = await renderExternalMaintenanceInvoicePdfBuffer(
+    request,
+    invoiceAmount,
+    statusComment
+  );
+
+  const storedInvoice = await storeExternalMaintenanceInvoicePdf(
+    requestOriginFallback,
+    renderedInvoice
+  );
+
+  return {
+    ...storedInvoice,
   };
 }
