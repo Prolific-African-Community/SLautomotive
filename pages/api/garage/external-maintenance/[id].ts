@@ -12,6 +12,7 @@ import {
   requireGarageApiAuth,
 } from "../../../../lib/external-maintenance";
 import { generateExternalMaintenanceInvoicePdf } from "../../../../lib/external-maintenance-invoice";
+import { regenerateExternalMaintenanceFeesPdf } from "../../../../lib/external-maintenance-fees";
 import { sendNovoTraluxMaintenanceStatusWebhook } from "../../../../lib/novotralux-maintenance-webhook";
 
 function getRequestOriginFallback(req: NextApiRequest) {
@@ -145,6 +146,8 @@ export default async function handler(
       const canSendQuote = new Set<ExternalMaintenanceStatus>([
         ExternalMaintenanceStatus.UNDER_REVIEW,
         ExternalMaintenanceStatus.QUOTE_PREPARING,
+        ExternalMaintenanceStatus.QUOTE_SENT,
+        ExternalMaintenanceStatus.QUOTE_REJECTED,
         ExternalMaintenanceStatus.SCHEDULED,
       ]).has(existing.status);
 
@@ -229,33 +232,16 @@ export default async function handler(
         resolvedInvoicePdfUrl = generatedInvoice.absoluteUrl;
       }
 
-      // For send_quote, generate PDF from lines if available
-      let resolvedQuotePdfUrl: string | null = parseString(req.body?.quotePdfUrl) ?? null;
-      if (isSendQuote && !resolvedQuotePdfUrl) {
-        const pdfLines =
-          existing.interventionLines.length > 0
-            ? existing.interventionLines.map((l) => ({
-                code: l.code,
-                label: l.label,
-                description: l.description,
-                qty: l.qty,
-                unitPrice: l.unitPrice,
-                total: l.total,
-              }))
-            : undefined;
-        try {
-          const generatedQuote = await generateExternalMaintenanceInvoicePdf(
-            getRequestOriginFallback(req),
-            existing,
-            quoteAmount as number,
-            parseString(req.body?.statusComment) ?? null,
-            pdfLines
-          );
-          resolvedQuotePdfUrl = generatedQuote.absoluteUrl;
-        } catch (pdfError) {
-          console.warn("send_quote PDF generation failed, continuing without PDF:", pdfError);
-        }
-      }
+      const quoteStatusComment = isSendQuote
+        ? parseString(req.body?.statusComment) ?? "Fees proposed to NovoTralux."
+        : null;
+      const regeneratedQuote = isSendQuote
+        ? await regenerateExternalMaintenanceFeesPdf(id, {
+            requestOriginFallback: getRequestOriginFallback(req),
+            statusComment: quoteStatusComment,
+            fallbackAmount: quoteAmount,
+          })
+        : null;
 
       const patch = isSendInvoice
         ? {
@@ -270,12 +256,10 @@ export default async function handler(
         ? {
             data: {
               quoteAmount: quoteAmount as number,
-              quotePdfUrl: resolvedQuotePdfUrl,
+              quotePdfUrl: regeneratedQuote?.pdf.absoluteUrl ?? null,
             },
             status: ExternalMaintenanceStatus.QUOTE_SENT,
-            statusComment:
-              parseString(req.body?.statusComment) ??
-              "Fees proposed to NovoTralux.",
+            statusComment: quoteStatusComment,
           }
         : buildExternalMaintenancePatchData(req.body);
 
@@ -318,7 +302,10 @@ export default async function handler(
         });
       });
 
-      if (patch.status && (patch.status !== existing.status || isSendInvoice)) {
+      if (
+        patch.status &&
+        (patch.status !== existing.status || isSendInvoice || isSendQuote)
+      ) {
         await sendNovoTraluxMaintenanceStatusWebhook(
           request,
           patch.statusComment

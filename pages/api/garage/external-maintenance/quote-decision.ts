@@ -5,7 +5,7 @@ import {
 import type { NextApiRequest, NextApiResponse } from "next";
 
 import { verifyNovoTraluxApiKey } from "../../../../lib/external-maintenance";
-import { generateExternalMaintenanceFeesPdf } from "../../../../lib/external-maintenance-invoice";
+import { regenerateExternalMaintenanceFeesPdf } from "../../../../lib/external-maintenance-fees";
 import { parseString, serializeError } from "../../../../lib/garage";
 import { sendNovoTraluxMaintenanceStatusWebhook } from "../../../../lib/novotralux-maintenance-webhook";
 import { prisma } from "../../../../lib/prisma";
@@ -105,13 +105,14 @@ export default async function handler(
         });
       }
 
-      const generatedFeesPdf = await generateExternalMaintenanceFeesPdf(
-        getRequestOriginFallback(req),
-        existing,
-        existing.quoteAmount,
-        comment
+      const regeneration = await regenerateExternalMaintenanceFeesPdf(
+        existing.id,
+        {
+          requestOriginFallback: getRequestOriginFallback(req),
+          statusComment: comment,
+        }
       );
-      generatedFeesPdfUrl = generatedFeesPdf.absoluteUrl;
+      generatedFeesPdfUrl = regeneration.pdf.absoluteUrl;
     }
 
     const updated = await prisma.$transaction(async (tx) => {

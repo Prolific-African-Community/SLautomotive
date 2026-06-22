@@ -1,6 +1,14 @@
+@tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+body {
+  margin: 0;
+  background: #f7f8f5;
+}
+
 button {
   outline: none !important;
   box-shadow: none !important;
+  background: transparent;
 }

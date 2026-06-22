@@ -350,6 +350,7 @@ export default function GarageDashboard() {
   const [seeding, setSeeding] = useState(false);
   const [externalActionId, setExternalActionId] = useState<string | null>(null);
   const [quoteDrafts, setQuoteDrafts] = useState<Record<string, QuoteDraft>>({});
+  const [selectedGarageRequestId, setSelectedGarageRequestId] = useState<string | null>(null);
   const [selectedExternalRequestId, setSelectedExternalRequestId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showCodeForm, setShowCodeForm] = useState(false);
@@ -806,12 +807,23 @@ export default function GarageDashboard() {
       setSavingLines(true);
       setError(null);
       setMessage(null);
-      await fetchJson(`/api/garage/external-maintenance/${requestId}/lines`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lines }),
-      });
-      setMessage("Lignes d'intervention sauvegardées.");
+      const response = await fetchJson<{
+        request: ExternalMaintenanceRequest;
+        pdfRegenerated: boolean;
+        amountChanged: boolean;
+        feesReapprovalRequired: boolean;
+      }>(`/api/garage/external-maintenance/${requestId}/lines`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lines }),
+        });
+      setMessage(
+        response.data?.feesReapprovalRequired
+          ? "Lignes sauvegardées, PDF régénéré et frais renvoyés pour une nouvelle approbation NovoTralux."
+          : response.data?.pdfRegenerated
+          ? "Lignes sauvegardées. Le PDF des frais et NovoTralux ont été mis à jour."
+          : "Lignes d'intervention sauvegardées."
+      );
       await loadExternalRequests();
     } catch (err: any) {
       setError(err?.message || "Impossible de sauvegarder les lignes.");
@@ -912,6 +924,7 @@ export default function GarageDashboard() {
     ];
   }, [externalRequests]);
 
+  const selectedGarageRequest = requests.find((request) => request.id === selectedGarageRequestId) ?? null;
   const selectedExternalRequest = externalRequests.find((request) => request.id === selectedExternalRequestId) ?? null;
 
   return (
@@ -1021,7 +1034,16 @@ export default function GarageDashboard() {
               </select>
             </section>
 
-            <section className="grid gap-4 lg:grid-cols-2">
+            {selectedGarageRequest ? (
+              <button
+                type="button"
+                aria-label="Fermer le détail demande"
+                className="fixed inset-0 z-[70] bg-black/95 backdrop-blur-sm"
+                onClick={() => setSelectedGarageRequestId(null)}
+              />
+            ) : null}
+
+            <section className="space-y-2">
               {loading ? (
                 <div className="bg-zinc-950 rounded-3xl border border-white/10 p-6 text-zinc-300">
                   Chargement des demandes garage...
@@ -1031,105 +1053,262 @@ export default function GarageDashboard() {
                   Aucune demande ne correspond aux filtres.
                 </div>
               ) : (
-                filteredRequests.map((request) => {
-                  const clientName =
-                    [request.firstName, request.lastName].filter(Boolean).join(" ") || "Client non renseigné";
-                  const vehicle =
-                    [request.vehicleBrand, request.vehicleModel, request.vehicleYear].filter(Boolean).join(" ") ||
-                    "Véhicule à préciser";
-                  const lineCount = request.summary?.interventionCount ?? request.interventions.length;
-                  const hasQuote = Boolean(request.quoteTotal && request.quoteTotal > 0);
+                <>
+                  <div className="hidden grid-cols-[1.1fr_0.9fr_1.1fr_0.8fr_0.9fr_0.8fr_0.8fr_0.9fr_0.6fr_0.9fr] gap-3 rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-500 lg:grid">
+                    <span>Client</span>
+                    <span>Téléphone</span>
+                    <span>Véhicule</span>
+                    <span>Plaque</span>
+                    <span>Problème</span>
+                    <span>Statut</span>
+                    <span>Priorité</span>
+                    <span>Frais</span>
+                    <span>Lignes</span>
+                    <span>Créée le</span>
+                  </div>
 
-                  return (
-                    <article
-                      key={request.id}
-                      className="from-zinc-950 via-zinc-950 rounded-3xl border border-white/10 bg-gradient-to-br to-zinc-900 p-5 transition hover:-translate-y-0.5 hover:border-yellow-300/40"
-                    >
-                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                          <div className="flex flex-wrap gap-2">
-                            <span className={`rounded-full px-3 py-1 text-xs font-bold ${statusClass(request.status)}`}>
-                              {statusLabel(request.status)}
-                            </span>
-                            <span
-                              className={`rounded-full border px-3 py-1 text-xs font-bold ${priorityClass(
-                                request.priority
-                              )}`}
-                            >
-                              {priorityLabel(request.priority)}
-                            </span>
-                          </div>
-                          <h2 className="mt-4 text-xl font-black">{clientName}</h2>
-                          <p className="mt-1 text-sm text-zinc-400">{request.phone || "-"}</p>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <span
-                              className={`rounded-full border px-3 py-1 text-xs font-bold ${
-                                request.phone
-                                  ? "border-emerald-300/30 bg-emerald-400/10 text-emerald-100"
-                                  : "border-white/10 bg-white/5 text-zinc-500"
-                              }`}
-                            >
-                              {request.phone ? "WhatsApp possible" : "Téléphone manquant"}
-                            </span>
-                            {hasQuote && (
-                              <span className="rounded-full border border-yellow-300/40 bg-yellow-300/10 px-3 py-1 text-xs font-bold text-yellow-100">
-                                Frais prêts
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="text-left sm:text-right">
-                          <p className="rounded-2xl border border-yellow-300/25 bg-yellow-300/10 px-4 py-3 text-3xl font-black text-yellow-200">
-                            {formatMoney(request.quoteTotal)}
-                          </p>
-                          <p className="text-xs text-zinc-500">
-                            {lineCount} ligne{lineCount > 1 ? "s" : ""}
-                          </p>
-                        </div>
-                      </div>
+                  {filteredRequests.map((request) => {
+                    const clientName =
+                      [request.firstName, request.lastName].filter(Boolean).join(" ") || "Client non renseigné";
+                    const vehicle =
+                      [request.vehicleBrand, request.vehicleModel, request.vehicleYear].filter(Boolean).join(" ") ||
+                      "Véhicule à préciser";
+                    const lineCount = request.summary?.interventionCount ?? request.interventions.length;
 
-                      <div className="mt-5 grid gap-3 text-sm text-zinc-300 sm:grid-cols-2">
+                    return (
+                      <article
+                        key={request.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setSelectedGarageRequestId(request.id)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            setSelectedGarageRequestId(request.id);
+                          }
+                        }}
+                        className="grid cursor-pointer grid-cols-2 gap-3 rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 transition hover:border-yellow-300/40 sm:grid-cols-3 lg:grid-cols-[1.1fr_0.9fr_1.1fr_0.8fr_0.9fr_0.8fr_0.8fr_0.9fr_0.6fr_0.9fr] lg:items-center"
+                      >
                         <div>
-                          <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Véhicule</p>
-                          <p className="mt-1 font-semibold text-white">{vehicle}</p>
-                          <p className="text-zinc-500">
+                          <p className="text-sm font-black text-white">{clientName}</p>
+                          <p className="mt-1 text-xs text-zinc-500 lg:hidden">{statusLabel(request.status)}</p>
+                        </div>
+                        <p className="text-xs text-zinc-300">{request.phone || "-"}</p>
+                        <div>
+                          <p className="text-xs font-semibold text-zinc-100">{vehicle}</p>
+                          <p className="mt-1 text-xs text-zinc-500 lg:hidden">
                             {request.plateNumber || "Plaque non renseignée"} · {formatNumber(request.mileage)} km
                           </p>
                         </div>
-                        <div>
-                          <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Problème</p>
-                          <p className="mt-1 font-semibold text-white">
-                            {request.problemType || "Diagnostic à qualifier"}
-                          </p>
-                          <p className="line-clamp-2 text-zinc-500">
-                            {request.description || request.symptoms.join(", ") || "-"}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="mt-5 flex flex-col gap-3 border-t border-white/10 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="text-xs text-zinc-500">Créée le {formatDate(request.createdAt)}</p>
-                        <div className="flex flex-wrap gap-2">
-                          {request.status === "NEW" && (
-                            <button className={ghostButtonClass} onClick={() => quickStatus(request.id, "IN_REVIEW")}>
-                              Passer en analyse
-                            </button>
-                          )}
-                          {request.status !== "QUOTE_READY" && lineCount > 0 && (
-                            <button className={ghostButtonClass} onClick={() => quickStatus(request.id, "QUOTE_READY")}>
-                              Frais prêts
-                            </button>
-                          )}
-                          <Link href={`/dashboard/garage/${request.id}`}>
-                            <a className={buttonClass}>Ouvrir</a>
-                          </Link>
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })
+                        <p className="text-xs text-zinc-400">{request.plateNumber || "-"}</p>
+                        <p className="text-xs text-zinc-300">{request.problemType || "Diagnostic à qualifier"}</p>
+                        <span className={`w-fit rounded-full px-2 py-1 text-[10px] font-bold ${statusClass(request.status)}`}>
+                          {statusLabel(request.status)}
+                        </span>
+                        <span
+                          className={`w-fit rounded-full border px-2 py-1 text-[10px] font-bold ${priorityClass(
+                            request.priority
+                          )}`}
+                        >
+                          {priorityLabel(request.priority)}
+                        </span>
+                        <span className="text-sm font-bold text-yellow-200">{formatMoney(request.quoteTotal)}</span>
+                        <span className="text-xs text-zinc-400">{lineCount}</span>
+                        <span className="text-xs text-zinc-500">{formatDate(request.createdAt)}</span>
+                      </article>
+                    );
+                  })}
+                </>
               )}
             </section>
+
+            {selectedGarageRequest ? (() => {
+              const clientName =
+                [selectedGarageRequest.firstName, selectedGarageRequest.lastName].filter(Boolean).join(" ") ||
+                "Client non renseigné";
+              const vehicle =
+                [
+                  selectedGarageRequest.vehicleBrand,
+                  selectedGarageRequest.vehicleModel,
+                  selectedGarageRequest.vehicleYear,
+                ]
+                  .filter(Boolean)
+                  .join(" ") || "Véhicule à préciser";
+              const lineCount =
+                selectedGarageRequest.summary?.interventionCount ??
+                selectedGarageRequest.interventions.length;
+              const hasQuote = Boolean(
+                selectedGarageRequest.quoteTotal && selectedGarageRequest.quoteTotal > 0
+              );
+
+              return (
+                <section className="fixed inset-x-4 top-6 z-[80] mx-auto max-h-[calc(100vh-3rem)] max-w-4xl overflow-y-auto rounded-3xl border border-yellow-300/30 bg-black p-5 text-white shadow-2xl shadow-black/80 sm:p-7">
+                  <div className="mb-5 flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-yellow-300">
+                        Détail demande garage
+                      </p>
+                      <h3 className="mt-1 text-2xl font-black text-white">{clientName}</h3>
+                    </div>
+                    <button
+                      type="button"
+                      className={ghostButtonClass}
+                      onClick={() => setSelectedGarageRequestId(null)}
+                    >
+                      Fermer
+                    </button>
+                  </div>
+
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <div className="flex flex-wrap gap-2">
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-bold ${statusClass(
+                            selectedGarageRequest.status
+                          )}`}
+                        >
+                          {statusLabel(selectedGarageRequest.status)}
+                        </span>
+                        <span
+                          className={`rounded-full border px-3 py-1 text-xs font-bold ${priorityClass(
+                            selectedGarageRequest.priority
+                          )}`}
+                        >
+                          {priorityLabel(selectedGarageRequest.priority)}
+                        </span>
+                        <span
+                          className={`rounded-full border px-3 py-1 text-xs font-bold ${
+                            selectedGarageRequest.phone
+                              ? "border-emerald-300/30 bg-emerald-400/10 text-emerald-100"
+                              : "border-white/10 bg-white/5 text-zinc-500"
+                          }`}
+                        >
+                          {selectedGarageRequest.phone ? "WhatsApp possible" : "Téléphone manquant"}
+                        </span>
+                        {hasQuote ? (
+                          <span className="rounded-full border border-yellow-300/40 bg-yellow-300/10 px-3 py-1 text-xs font-bold text-yellow-100">
+                            Frais prêts
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-4 text-sm text-zinc-400">{selectedGarageRequest.phone || "-"}</p>
+                    </div>
+
+                    <div className="text-left sm:text-right">
+                      <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Total frais</p>
+                      <p className="mt-2 text-3xl font-black text-yellow-200">
+                        {formatMoney(selectedGarageRequest.quoteTotal)}
+                      </p>
+                      <p className="mt-2 text-xs text-zinc-500">
+                        {lineCount} ligne{lineCount > 1 ? "s" : ""} · Créée le{" "}
+                        {formatDate(selectedGarageRequest.createdAt)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 grid gap-4 lg:grid-cols-2">
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-zinc-500">Client</p>
+                      <p className="mt-3 text-base font-semibold text-white">{clientName}</p>
+                      <p className="mt-1 text-sm text-zinc-300">{selectedGarageRequest.phone || "-"}</p>
+                      <p className="mt-1 text-sm text-zinc-400">
+                        {selectedGarageRequest.email || "Email non renseigné"}
+                      </p>
+                    </div>
+
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-zinc-500">Véhicule</p>
+                      <p className="mt-3 text-base font-semibold text-white">{vehicle}</p>
+                      <p className="mt-1 text-sm text-zinc-300">
+                        {selectedGarageRequest.plateNumber || "Plaque non renseignée"}
+                      </p>
+                      <p className="mt-1 text-sm text-zinc-400">
+                        Kilométrage {formatNumber(selectedGarageRequest.mileage)} km
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-zinc-500">Demande</p>
+                    <p className="mt-3 text-base font-semibold text-white">
+                      {selectedGarageRequest.problemType || "Diagnostic à qualifier"}
+                    </p>
+                    <p className="mt-2 text-sm text-zinc-300">
+                      {selectedGarageRequest.symptoms.length > 0
+                        ? selectedGarageRequest.symptoms.join(", ")
+                        : "Aucun symptôme renseigné"}
+                    </p>
+                    <p className="mt-3 whitespace-pre-wrap text-sm text-zinc-400">
+                      {selectedGarageRequest.description || "Aucune description détaillée."}
+                    </p>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-zinc-500">
+                        Interventions
+                      </p>
+                      <span className="text-xs text-zinc-500">
+                        {lineCount} ligne{lineCount > 1 ? "s" : ""}
+                      </span>
+                    </div>
+
+                    {selectedGarageRequest.interventions.length > 0 ? (
+                      <div className="mt-3 space-y-2">
+                        {selectedGarageRequest.interventions.slice(0, 5).map((line) => (
+                          <div
+                            key={line.id}
+                            className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2"
+                          >
+                            <span className="text-sm text-zinc-200">Ligne intervention</span>
+                            <span className="text-sm font-semibold text-yellow-200">
+                              {formatMoney(line.total)}
+                            </span>
+                          </div>
+                        ))}
+                        {selectedGarageRequest.interventions.length > 5 ? (
+                          <p className="text-xs text-zinc-500">
+                            {selectedGarageRequest.interventions.length - 5} ligne
+                            {selectedGarageRequest.interventions.length - 5 > 1 ? "s" : ""} supplémentaire
+                            {selectedGarageRequest.interventions.length - 5 > 1 ? "s" : ""} dans la fiche complète.
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p className="mt-3 text-sm text-zinc-400">Aucune ligne d&apos;intervention pour l&apos;instant.</p>
+                    )}
+                  </div>
+
+                  <div className="mt-6 flex flex-wrap gap-3 border-t border-white/10 pt-5">
+                    {selectedGarageRequest.status === "NEW" ? (
+                      <button
+                        className={ghostButtonClass}
+                        onClick={async () => {
+                          await quickStatus(selectedGarageRequest.id, "IN_REVIEW");
+                        }}
+                      >
+                        Passer en analyse
+                      </button>
+                    ) : null}
+
+                    {selectedGarageRequest.status !== "QUOTE_READY" && lineCount > 0 ? (
+                      <button
+                        className={ghostButtonClass}
+                        onClick={async () => {
+                          await quickStatus(selectedGarageRequest.id, "QUOTE_READY");
+                        }}
+                      >
+                        Frais prêts
+                      </button>
+                    ) : null}
+
+                    <Link href={`/dashboard/garage/${selectedGarageRequest.id}`}>
+                      <a className={buttonClass}>Ouvrir fiche complète</a>
+                    </Link>
+                  </div>
+                </section>
+              );
+            })() : null}
           </>
         )}
 
@@ -1453,25 +1632,25 @@ export default function GarageDashboard() {
                                 </div>
 
                                 {codeSearch2.trim() && filteredCodes.length > 0 && (
-                                  <div className="mt-2 max-h-48 overflow-y-auto rounded-xl border border-white/10 bg-black">
-                                    {filteredCodes.slice(0, 20).map((code) => (
-                                      <button
-                                        key={code.id}
-                                        type="button"
-                                        className="flex w-full items-center justify-between gap-2 border-b border-white/5 px-3 py-2 text-left text-xs transition hover:bg-white/[0.06]"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          addDraftLine(request.id, code);
-                                          setCodeSearch2("");
-                                        }}
-                                      >
-                                        <span className="font-bold text-yellow-100">{code.code}</span>
-                                        <span className="flex-1 truncate text-zinc-300">{code.label}</span>
-                                        <span className="text-zinc-400">{formatMoney(code.unitPrice)}</span>
-                                      </button>
-                                    ))}
-                                  </div>
-                                )}
+  <div className="mt-2 max-h-48 overflow-y-auto rounded-xl border border-yellow-300/20 bg-zinc-950 shadow-[0_20px_80px_rgba(0,0,0,0.85)]">
+    {filteredCodes.slice(0, 20).map((code) => (
+      <button
+        key={code.id}
+        type="button"
+        className="flex w-full appearance-none items-center justify-between gap-2 border-b border-white/5 bg-zinc-950 px-3 py-2 text-left text-xs text-white transition last:border-b-0 hover:bg-zinc-900"
+        onClick={(e) => {
+          e.stopPropagation();
+          addDraftLine(request.id, code);
+          setCodeSearch2("");
+        }}
+      >
+        <span className="font-bold text-yellow-200">{code.code}</span>
+        <span className="flex-1 truncate text-zinc-300">{code.label}</span>
+        <span className="shrink-0 text-zinc-400">{formatMoney(code.unitPrice)}</span>
+      </button>
+    ))}
+  </div>
+)}
 
                                 {requestDraftLines.length > 0 && (
                                   <div className="mt-3 flex items-center justify-between gap-3 border-t border-white/10 pt-3">
@@ -1525,7 +1704,13 @@ export default function GarageDashboard() {
                             </div>
                           ) : null}
 
-                          {["UNDER_REVIEW", "QUOTE_PREPARING", "SCHEDULED"].includes(request.status) ? (
+                          {[
+                            "UNDER_REVIEW",
+                            "QUOTE_PREPARING",
+                            "QUOTE_SENT",
+                            "QUOTE_REJECTED",
+                            "SCHEDULED",
+                          ].includes(request.status) ? (
                             <div className="mt-4 grid gap-3 rounded-2xl border border-white/10 bg-black/20 p-4">
                               {(request.interventionLines?.length ?? 0) > 0 ? (
                                 <p className="text-xs text-zinc-400">
@@ -1555,7 +1740,13 @@ export default function GarageDashboard() {
                                 onClick={() => void sendExternalQuote(request)}
                                 disabled={externalActionId === request.id}
                               >
-                                {externalActionId === request.id ? "Envoi en cours..." : "Proposer les frais"}
+                                {externalActionId === request.id
+                                  ? "Envoi en cours..."
+                                  : request.status === "QUOTE_REJECTED"
+                                  ? "Reproposer les frais"
+                                  : request.status === "QUOTE_SENT"
+                                  ? "Mettre à jour les frais"
+                                  : "Proposer les frais"}
                               </button>
                             </div>
                           ) : null}

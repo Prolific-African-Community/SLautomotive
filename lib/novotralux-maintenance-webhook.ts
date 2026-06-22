@@ -43,7 +43,17 @@ function truncateResponseBody(value: string) {
 
 function buildMaintenanceWebhookPayload(
   request: ExternalMaintenanceRequest,
-  statusComment: string | null
+  statusComment: string | null,
+  interventionLines: Array<{
+    id: string;
+    interventionCodeId: string | null;
+    code: string | null;
+    label: string;
+    description: string | null;
+    qty: number;
+    unitPrice: number;
+    total: number;
+  }>
 ) {
   return {
     sourceProvider: NOVOTRALUX_PROVIDER,
@@ -59,6 +69,16 @@ function buildMaintenanceWebhookPayload(
     invoiceAmount: request.invoiceAmount,
     quotePdfUrl: request.quotePdfUrl,
     invoicePdfUrl: request.invoicePdfUrl,
+    interventionLines: interventionLines.map((line) => ({
+      id: line.id,
+      code: line.code,
+      label: line.label,
+      description: line.description,
+      qty: line.qty,
+      unitPrice: line.unitPrice,
+      total: line.total,
+      isCustom: line.interventionCodeId === null,
+    })),
   };
 }
 
@@ -139,9 +159,18 @@ export async function sendNovoTraluxMaintenanceStatusWebhook(
   request: ExternalMaintenanceRequest,
   statusComment: string | null
 ) {
-  const payload = buildMaintenanceWebhookPayload(request, statusComment);
-
   try {
+    const interventionLines =
+      await prisma.externalMaintenanceInterventionLine.findMany({
+        where: { externalMaintenanceRequestId: request.id },
+        orderBy: { createdAt: "asc" },
+      });
+    const payload = buildMaintenanceWebhookPayload(
+      request,
+      statusComment,
+      interventionLines
+    );
+
     const delivery = await prisma.externalMaintenanceWebhookDelivery.create({
       data: {
         externalMaintenanceRequestId: request.id,

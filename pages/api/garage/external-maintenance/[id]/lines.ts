@@ -1,7 +1,41 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import { ExternalMaintenanceStatus } from "@prisma/client";
 import { prisma } from "../../../../../lib/prisma";
 import { ApiResponse, serializeError } from "../../../../../lib/garage";
 import { requireGarageApiAuth } from "../../../../../lib/external-maintenance";
+import { regenerateExternalMaintenanceFeesPdf } from "../../../../../lib/external-maintenance-fees";
+import { sendNovoTraluxMaintenanceStatusWebhook } from "../../../../../lib/novotralux-maintenance-webhook";
+
+const PDF_REGENERATION_STATUSES = new Set<ExternalMaintenanceStatus>([
+  ExternalMaintenanceStatus.QUOTE_SENT,
+  ExternalMaintenanceStatus.QUOTE_APPROVED,
+  ExternalMaintenanceStatus.QUOTE_REJECTED,
+  ExternalMaintenanceStatus.SCHEDULED,
+  ExternalMaintenanceStatus.IN_PROGRESS,
+  ExternalMaintenanceStatus.COMPLETED,
+  ExternalMaintenanceStatus.INVOICED,
+  ExternalMaintenanceStatus.PAID,
+  ExternalMaintenanceStatus.CLOSED,
+]);
+
+const REAPPROVAL_REQUIRED_STATUSES = new Set<ExternalMaintenanceStatus>([
+  ExternalMaintenanceStatus.QUOTE_APPROVED,
+  ExternalMaintenanceStatus.SCHEDULED,
+  ExternalMaintenanceStatus.IN_PROGRESS,
+  ExternalMaintenanceStatus.COMPLETED,
+  ExternalMaintenanceStatus.INVOICED,
+  ExternalMaintenanceStatus.PAID,
+  ExternalMaintenanceStatus.CLOSED,
+]);
+
+function getRequestOriginFallback(req: NextApiRequest) {
+  const forwardedProto = Array.isArray(req.headers["x-forwarded-proto"])
+    ? req.headers["x-forwarded-proto"][0]
+    : req.headers["x-forwarded-proto"];
+  return req.headers.host
+    ? `${forwardedProto || "http"}://${req.headers.host}`
+    : null;
+}
 
 type LineInput = {
   interventionCodeId?: string | null;
@@ -55,7 +89,12 @@ export default async function handler(
 
   const existing = await prisma.externalMaintenanceRequest.findUnique({
     where: { id },
-    select: { id: true, status: true },
+    select: {
+      id: true,
+      status: true,
+      quoteAmount: true,
+      quotePdfUrl: true,
+    },
   });
 
   if (!existing) {
@@ -85,7 +124,7 @@ export default async function handler(
     }
 
     try {
-      const lines = await prisma.$transaction(async (tx) => {
+      await prisma.$transaction(async (tx) => {
         await tx.externalMaintenanceInterventionLine.deleteMany({
           where: { externalMaintenanceRequestId: id },
         });
@@ -115,13 +154,78 @@ export default async function handler(
           });
         }
 
-        return tx.externalMaintenanceInterventionLine.findMany({
-          where: { externalMaintenanceRequestId: id },
-          orderBy: { createdAt: "asc" },
-        });
       });
 
-      return res.status(200).json({ success: true, data: lines });
+      const shouldRegeneratePdf =
+        Boolean(existing.quotePdfUrl) ||
+        PDF_REGENERATION_STATUSES.has(existing.status);
+      let pdfRegenerated = false;
+      let feesReapprovalRequired = false;
+      let amountChanged = false;
+
+      if (shouldRegeneratePdf) {
+        const regeneration = await regenerateExternalMaintenanceFeesPdf(id, {
+          requestOriginFallback: getRequestOriginFallback(req),
+          statusComment: "Frais mis à jour après modification des lignes d'intervention.",
+        });
+        pdfRegenerated = true;
+        amountChanged =
+          existing.quoteAmount === null ||
+          Math.abs(existing.quoteAmount - regeneration.feesAmount) >= 0.01;
+
+        if (
+          amountChanged &&
+          REAPPROVAL_REQUIRED_STATUSES.has(existing.status)
+        ) {
+          await prisma.$transaction(async (tx) => {
+            await tx.externalMaintenanceRequest.update({
+              where: { id },
+              data: { status: ExternalMaintenanceStatus.QUOTE_SENT },
+            });
+            await tx.externalMaintenanceStatusHistory.create({
+              data: {
+                externalMaintenanceRequestId: id,
+                oldStatus: existing.status,
+                newStatus: ExternalMaintenanceStatus.QUOTE_SENT,
+                comment:
+                  "Montant des frais modifié. Une nouvelle approbation NovoTralux est requise.",
+              },
+            });
+          });
+          feesReapprovalRequired = true;
+        }
+      }
+
+      const request = await prisma.externalMaintenanceRequest.findUniqueOrThrow({
+        where: { id },
+        include: {
+          interventionLines: { orderBy: { createdAt: "asc" } },
+          statusHistory: { orderBy: { createdAt: "desc" } },
+          webhookDeliveries: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
+        },
+      });
+
+      if (shouldRegeneratePdf) {
+        await sendNovoTraluxMaintenanceStatusWebhook(
+          request,
+          feesReapprovalRequired
+            ? "Frais révisés : une nouvelle approbation est requise."
+            : "Frais et lignes d'intervention mis à jour par SL Automotive."
+        );
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          request,
+          pdfRegenerated,
+          amountChanged,
+          feesReapprovalRequired,
+        },
+      });
     } catch (error: any) {
       console.error("PUT /api/garage/external-maintenance/[id]/lines error:", error);
       return res.status(500).json({ success: false, message: "Failed to save lines.", error: serializeError(error) });
