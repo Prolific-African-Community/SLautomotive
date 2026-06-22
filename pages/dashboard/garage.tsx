@@ -635,7 +635,7 @@ export default function GarageDashboard() {
     const hasLines = (request.interventionLines?.length ?? 0) > 0;
     const quoteAmount = Number(draft?.amount);
 
-    if (!hasLines && (!draft?.amount.trim() || !Number.isFinite(quoteAmount) || quoteAmount < 0)) {
+    if (!hasLines && (!draft?.amount.trim() || !Number.isFinite(quoteAmount) || quoteAmount <= 0)) {
       setError("Ajoutez des lignes d'intervention ou saisissez un montant de frais valide.");
       return;
     }

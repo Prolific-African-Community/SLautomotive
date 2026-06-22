@@ -42,9 +42,9 @@ export async function regenerateExternalMaintenanceFeesPdf(
     request.quoteAmount ??
     request.invoiceAmount;
 
-  if (feesAmount === null || feesAmount < 0) {
+  if (feesAmount === null || feesAmount <= 0) {
     throw new Error(
-      "A fees amount or at least one intervention line is required to generate the PDF."
+      "A positive fees amount or at least one intervention line with a positive total is required to generate the PDF."
     );
   }
 

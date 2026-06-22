@@ -11,9 +11,21 @@ import {
   buildExternalMaintenancePatchData,
   requireGarageApiAuth,
 } from "../../../../lib/external-maintenance";
-import { generateExternalMaintenanceInvoicePdf } from "../../../../lib/external-maintenance-invoice";
+import {
+  ExternalMaintenancePdfStorageError,
+  generateExternalMaintenanceInvoicePdf,
+} from "../../../../lib/external-maintenance-invoice";
 import { regenerateExternalMaintenanceFeesPdf } from "../../../../lib/external-maintenance-fees";
 import { sendNovoTraluxMaintenanceStatusWebhook } from "../../../../lib/novotralux-maintenance-webhook";
+
+type ExternalMaintenanceApiResponse = ApiResponse & {
+  request?: unknown;
+  quoteAmount?: number | null;
+  quotePdfUrl?: string | null;
+  interventionLines?: unknown[];
+  webhookDelivered?: boolean | null;
+  webhookError?: string | null;
+};
 
 function getRequestOriginFallback(req: NextApiRequest) {
   const forwardedProtoHeader = req.headers["x-forwarded-proto"];
@@ -32,7 +44,7 @@ function getRequestOriginFallback(req: NextApiRequest) {
 
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse<ApiResponse>
+  res: NextApiResponse<ExternalMaintenanceApiResponse>
 ) {
   const { id } = req.query;
 
@@ -157,7 +169,7 @@ export default async function handler(
         isSendQuote &&
         (quoteAmount === null ||
           quoteAmount === undefined ||
-          quoteAmount < 0 ||
+          quoteAmount <= 0 ||
           !canSendQuote)
       ) {
         return res.status(409).json({
@@ -237,13 +249,33 @@ export default async function handler(
       const quoteStatusComment = isSendQuote
         ? parseString(req.body?.statusComment) ?? "Fees proposed to NovoTralux."
         : null;
-      const regeneratedQuote = isSendQuote
-        ? await regenerateExternalMaintenanceFeesPdf(id, {
+      let regeneratedQuote = null;
+
+      if (isSendQuote) {
+        try {
+          regeneratedQuote = await regenerateExternalMaintenanceFeesPdf(id, {
             requestOriginFallback: getRequestOriginFallback(req),
             statusComment: quoteStatusComment,
             fallbackAmount: quoteAmount,
-          })
-        : null;
+          });
+        } catch (error) {
+          console.error("External maintenance fees PDF generation failed.", {
+            externalMaintenanceRequestId: id,
+            error:
+              error instanceof Error
+                ? { name: error.name, message: error.message }
+                : { message: "Unknown PDF generation error." },
+          });
+
+          return res.status(500).json({
+            success: false,
+            message:
+              error instanceof ExternalMaintenancePdfStorageError
+                ? error.message
+                : "Unable to generate the external maintenance fees PDF.",
+          });
+        }
+      }
 
       const patch = isSendInvoice
         ? {
@@ -320,11 +352,14 @@ export default async function handler(
         });
       });
 
-      if (
+      let webhookDelivery = null;
+      const shouldSendWebhook = Boolean(
         patch.status &&
-        (patch.status !== existing.status || isSendInvoice || isSendQuote)
-      ) {
-        await sendNovoTraluxMaintenanceStatusWebhook(
+          (patch.status !== existing.status || isSendInvoice || isSendQuote)
+      );
+
+      if (shouldSendWebhook) {
+        webhookDelivery = await sendNovoTraluxMaintenanceStatusWebhook(
           request,
           patch.statusComment
         );
@@ -333,6 +368,20 @@ export default async function handler(
       return res.status(200).json({
         success: true,
         data: request,
+        request,
+        quoteAmount: request.quoteAmount,
+        quotePdfUrl: request.quotePdfUrl,
+        interventionLines: request.interventionLines,
+        webhookDelivered: webhookDelivery
+          ? webhookDelivery.status === "DELIVERED"
+          : shouldSendWebhook
+          ? false
+          : null,
+        webhookError:
+          webhookDelivery?.errorMessage ??
+          (shouldSendWebhook && !webhookDelivery
+            ? "Webhook delivery could not be logged."
+            : null),
       });
     } catch (error: any) {
       console.error(

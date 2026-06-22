@@ -554,16 +554,30 @@ export function resolveSlAutomotivePublicBaseUrl(requestOriginFallback?: string 
 }
 
 async function uploadPublicFeesPdfToBlob(buffer: Buffer, pathname: string) {
-  if (!process.env.BLOB_READ_WRITE_TOKEN?.trim()) {
-    return null;
-  }
-
   return put(pathname, buffer, {
     access: "public",
     addRandomSuffix: false,
     contentType: "application/pdf",
     cacheControlMaxAge: 0,
   });
+}
+
+function hasVercelBlobCredentials() {
+  const hasReadWriteToken = Boolean(
+    process.env.BLOB_READ_WRITE_TOKEN?.trim()
+  );
+  const hasOidcCredentials = Boolean(
+    process.env.VERCEL_OIDC_TOKEN?.trim() && process.env.BLOB_STORE_ID?.trim()
+  );
+
+  return hasReadWriteToken || hasOidcCredentials;
+}
+
+export class ExternalMaintenancePdfStorageError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ExternalMaintenancePdfStorageError";
+  }
 }
 
 export async function renderExternalMaintenanceInvoicePdfBuffer(
@@ -812,28 +826,42 @@ export async function storeExternalMaintenanceInvoicePdf(
   requestOriginFallback: string | null,
   renderedInvoice: RenderedExternalMaintenanceInvoicePdf
 ) {
-  if (process.env.BLOB_READ_WRITE_TOKEN?.trim()) {
+  const isProduction = process.env.NODE_ENV === "production";
+
+  if (hasVercelBlobCredentials()) {
     try {
       const blob = await uploadPublicFeesPdfToBlob(
         renderedInvoice.buffer,
         `external-maintenance/fees/${renderedInvoice.fileName}`
       );
 
-      if (blob) {
-        return {
-          storage: "blob" as const,
-          fileName: renderedInvoice.fileName,
-          invoiceReference: renderedInvoice.invoiceReference,
-          publicPath: renderedInvoice.publicPath,
-          absoluteUrl: blob.url,
-        };
-      }
+      return {
+        storage: "blob" as const,
+        fileName: renderedInvoice.fileName,
+        invoiceReference: renderedInvoice.invoiceReference,
+        publicPath: renderedInvoice.publicPath,
+        absoluteUrl: blob.url,
+      };
     } catch (error) {
       console.warn(
-        "Vercel Blob upload failed. Ensure BLOB_READ_WRITE_TOKEN belongs to a public Blob store. Using the local fees PDF fallback.",
-        error
+        "Vercel Blob upload failed for an external maintenance PDF.",
+        error instanceof Error
+          ? { name: error.name, message: error.message }
+          : { message: "Unknown Blob upload error." }
       );
+
+      if (isProduction) {
+        throw new ExternalMaintenancePdfStorageError(
+          "Unable to store the fees PDF in Vercel Blob. Verify that the linked Blob store is public and writable."
+        );
+      }
     }
+  }
+
+  if (isProduction) {
+    throw new ExternalMaintenancePdfStorageError(
+      "Vercel Blob credentials are missing for production PDF storage. Configure BLOB_READ_WRITE_TOKEN or link a Blob store with OIDC."
+    );
   }
 
   await fs.mkdir(GENERATED_FEES_DIR, { recursive: true });
