@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import * as cheerio from "cheerio";
+import { requireDashboardAuth } from "../../../lib/simple-auth";
 
 type ApiResponse =
   | {
@@ -48,6 +49,14 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<ApiResponse>
 ) {
+  const auth = requireDashboardAuth(req, res);
+  if (!auth.ok) {
+    return res.status(auth.status).json({
+      success: false,
+      message: auth.message,
+    });
+  }
+
   if (req.method !== "POST") {
     return res.status(405).json({
       success: false,

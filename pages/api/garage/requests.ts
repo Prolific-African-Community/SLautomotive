@@ -9,6 +9,7 @@ import {
   parseSymptoms,
   serializeError,
 } from "../../../lib/garage";
+import { requireDashboardAuth } from "../../../lib/simple-auth";
 
 function normalizeCreateData(body: any) {
   const vehicleYear = parseNumber(body.vehicleYear);
@@ -55,6 +56,14 @@ export default async function handler(
   res: NextApiResponse<ApiResponse>
 ) {
   if (req.method === "GET") {
+    const auth = requireDashboardAuth(req, res);
+    if (!auth.ok) {
+      return res.status(auth.status).json({
+        success: false,
+        message: auth.message,
+      });
+    }
+
     try {
       const requests = await prisma.garageRequest.findMany({
         orderBy: {

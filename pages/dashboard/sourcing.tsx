@@ -1,5 +1,7 @@
+import type { GetServerSideProps } from "next";
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
+import { getDashboardPageAuthRedirect } from "../../lib/simple-auth";
 
 type Listing = {
   id: string;
@@ -469,13 +471,19 @@ function cardClass(extra = "") {
 }
 
 async function fetchJson<T = any>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, options);
+  const res = await fetch(url, {
+    credentials: "include",
+    ...options,
+  });
   const text = await res.text();
 
   try {
     const json = JSON.parse(text);
 
     if (!res.ok) {
+      if (res.status === 401 && typeof window !== "undefined") {
+        window.location.href = "/login";
+      }
       throw new Error(json.message || `Erreur API ${res.status} sur ${url}`);
     }
 
@@ -521,6 +529,17 @@ export default function SourcingDashboard() {
   const [cleaningRuleId, setCleaningRuleId] = useState<string | null>(null);
   const [ruleActionMessage, setRuleActionMessage] = useState<string | null>(null);
   const [publishingDealerId, setPublishingDealerId] = useState<string | null>(null);
+
+  async function logout() {
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
+    } finally {
+      window.location.href = "/login";
+    }
+  }
 
   function updateForm<K extends keyof NewListingForm>(key: K, value: NewListingForm[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -1363,6 +1382,13 @@ async function createListing(e: FormEvent) {
             >
               Dealer
             </a>
+            <button
+              type="button"
+              onClick={logout}
+              className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-xs font-semibold uppercase text-zinc-200 transition hover:border-yellow-300/40 hover:text-yellow-200"
+            >
+              Déconnexion
+            </button>
           </div>
         </div>
       </header>
@@ -2414,3 +2440,7 @@ async function createListing(e: FormEvent) {
     </main>
   );
 }
+
+export const getServerSideProps: GetServerSideProps = async (context) => {
+  return getDashboardPageAuthRedirect(context);
+};

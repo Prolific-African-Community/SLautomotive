@@ -1,3 +1,4 @@
+import type { GetServerSideProps } from "next";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -6,6 +7,7 @@ import {
   buildGarageQuoteWhatsappUrl,
   normalizePhoneForWhatsapp,
 } from "../../../lib/garage-whatsapp";
+import { getDashboardPageAuthRedirect } from "../../../lib/simple-auth";
 
 type GarageRequest = {
   id: string;
@@ -232,10 +234,16 @@ function statusClass(status: string) {
 }
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<ApiResponse<T>> {
-  const res = await fetch(url, options);
+  const res = await fetch(url, {
+    credentials: "include",
+    ...options,
+  });
   const json = await res.json();
 
   if (!res.ok || !json.success) {
+    if (res.status === 401 && typeof window !== "undefined") {
+      window.location.href = "/login";
+    }
     throw new Error(json.message || `Erreur API ${res.status}`);
   }
 
@@ -859,3 +867,7 @@ export default function GarageRequestDetail() {
     </main>
   );
 }
+
+export const getServerSideProps: GetServerSideProps = async (context) => {
+  return getDashboardPageAuthRedirect(context);
+};

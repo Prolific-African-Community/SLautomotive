@@ -9,6 +9,7 @@ import {
   parseSymptoms,
   serializeError,
 } from "../../../../lib/garage";
+import { requireDashboardAuth } from "../../../../lib/simple-auth";
 
 function buildPatchData(body: any) {
   const data: any = {};
@@ -75,6 +76,14 @@ export default async function handler(
     return res.status(400).json({
       success: false,
       message: "Invalid garage request id.",
+    });
+  }
+
+  const auth = requireDashboardAuth(req, res);
+  if (!auth.ok) {
+    return res.status(auth.status).json({
+      success: false,
+      message: auth.message,
     });
   }
 

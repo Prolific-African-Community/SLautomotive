@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import * as cheerio from "cheerio";
 import { prisma } from "../../../../lib/prisma";
+import { requireDashboardAuth } from "../../../../lib/simple-auth";
 
 type SourceName = "luxauto" | "mobile" | "autoscout";
 
@@ -1077,6 +1078,14 @@ async function extractFromSource(params: {
 /* -------------------------------- HANDLER -------------------------------- */
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const auth = requireDashboardAuth(req, res);
+  if (!auth.ok) {
+    return res.status(auth.status).json({
+      success: false,
+      message: auth.message,
+    });
+  }
+
   const { id } = req.query;
 
   if (!id || typeof id !== "string") {

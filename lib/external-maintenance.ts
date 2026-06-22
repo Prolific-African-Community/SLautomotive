@@ -10,6 +10,7 @@ import type { Prisma } from "@prisma/client";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { parseDate, parseNumber, parseString } from "./garage";
 import { prisma as defaultPrisma } from "./prisma";
+import { requireDashboardAuth } from "./simple-auth";
 
 export const EXTERNAL_MAINTENANCE_SOURCE_SYSTEM_DEFAULT = "NOVOTRALUX_PORTAL";
 
@@ -182,27 +183,7 @@ export function requireGarageApiAuth(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  const internalApiKey = process.env.SL_GARAGE_INTERNAL_API_KEY?.trim();
-  const requestApiKey = req.headers["x-internal-api-key"];
-
-  if (
-    internalApiKey &&
-    typeof requestApiKey === "string" &&
-    requestApiKey === internalApiKey
-  ) {
-    return { ok: true as const, mode: "api-key" as const };
-  }
-
-  if (isSameOriginBrowserRequest(req)) {
-    return { ok: true as const, mode: "same-origin" as const };
-  }
-
-  return {
-    ok: false as const,
-    status: 401,
-    message:
-      "Unauthorized. Use the SL dashboard from the same origin or provide x-internal-api-key.",
-  };
+  return requireDashboardAuth(req, res);
 }
 
 export async function findExistingExternalMaintenanceRequest(

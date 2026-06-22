@@ -1,3 +1,4 @@
+import type { GetServerSideProps } from "next";
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
@@ -8,6 +9,7 @@ import {
   externalMaintenanceVehicleTypeLabel,
 } from "../../lib/external-maintenance-ui";
 import { GARAGE_WHATSAPP_PHONE } from "../../lib/garage-whatsapp";
+import { getDashboardPageAuthRedirect } from "../../lib/simple-auth";
 
 type GarageRequest = {
   id: string;
@@ -327,10 +329,16 @@ function toNullableNumber(value: string) {
 }
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<ApiResponse<T>> {
-  const res = await fetch(url, options);
+  const res = await fetch(url, {
+    credentials: "include",
+    ...options,
+  });
   const json = await res.json();
 
   if (!res.ok || !json.success) {
+    if (res.status === 401 && typeof window !== "undefined") {
+      window.location.href = "/login";
+    }
     throw new Error(json.message || `Erreur API ${res.status}`);
   }
 
@@ -927,6 +935,17 @@ export default function GarageDashboard() {
   const selectedGarageRequest = requests.find((request) => request.id === selectedGarageRequestId) ?? null;
   const selectedExternalRequest = externalRequests.find((request) => request.id === selectedExternalRequestId) ?? null;
 
+  async function logout() {
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
+    } finally {
+      window.location.href = "/login";
+    }
+  }
+
   return (
     <main className="min-h-screen bg-black text-white">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-5 py-6 sm:px-8 lg:px-10">
@@ -963,6 +982,9 @@ export default function GarageDashboard() {
               disabled={activeTab === "codes" ? codesLoading : activeTab === "external" ? externalLoading : loading}
             >
               Rafraîchir
+            </button>
+            <button className={ghostButtonClass} onClick={logout}>
+              Déconnexion
             </button>
           </div>
         </header>
@@ -2259,3 +2281,7 @@ export default function GarageDashboard() {
     </main>
   );
 }
+
+export const getServerSideProps: GetServerSideProps = async (context) => {
+  return getDashboardPageAuthRedirect(context);
+};

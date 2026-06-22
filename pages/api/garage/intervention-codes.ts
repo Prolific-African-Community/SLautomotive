@@ -6,6 +6,7 @@ import {
   parseString,
   serializeError,
 } from "../../../lib/garage";
+import { requireDashboardAuth } from "../../../lib/simple-auth";
 
 function normalizeCode(value: unknown) {
   const text = parseString(value);
@@ -22,6 +23,14 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<ApiResponse>
 ) {
+  const auth = requireDashboardAuth(req, res);
+  if (!auth.ok) {
+    return res.status(auth.status).json({
+      success: false,
+      message: auth.message,
+    });
+  }
+
   if (req.method === "GET") {
     try {
       const activeOnly = req.query.activeOnly === "true";

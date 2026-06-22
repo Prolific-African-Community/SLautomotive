@@ -8,6 +8,7 @@ import {
   parseString,
   serializeError,
 } from "../../../../lib/dealer";
+import { requireDashboardAuth } from "../../../../lib/simple-auth";
 
 function safeStatus(value: unknown) {
   return typeof value === "string" &&
@@ -66,6 +67,14 @@ export default async function handler(
     return res.status(400).json({
       success: false,
       message: "Invalid dealer vehicle id.",
+    });
+  }
+
+  const auth = requireDashboardAuth(req, res);
+  if (!auth.ok) {
+    return res.status(auth.status).json({
+      success: false,
+      message: auth.message,
     });
   }
 

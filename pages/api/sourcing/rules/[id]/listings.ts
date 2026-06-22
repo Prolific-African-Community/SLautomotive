@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "../../../../../lib/prisma";
+import { requireDashboardAuth } from "../../../../../lib/simple-auth";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { id } = req.query;
@@ -8,6 +9,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({
       success: false,
       message: "Invalid rule id.",
+    });
+  }
+
+  const auth = requireDashboardAuth(req, res);
+  if (!auth.ok) {
+    return res.status(auth.status).json({
+      success: false,
+      message: auth.message,
     });
   }
 

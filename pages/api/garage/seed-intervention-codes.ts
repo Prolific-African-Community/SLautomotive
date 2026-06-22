@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "../../../lib/prisma";
 import { ApiResponse, serializeError } from "../../../lib/garage";
+import { requireDashboardAuth } from "../../../lib/simple-auth";
 
 const INTERVENTION_CODES = [
   ["DIAG-GENERAL", "Diagnostic général véhicule", "Diagnostic", "Contrôle initial permettant d'identifier les causes probables avant devis détaillé.", 59, 45],
@@ -65,6 +66,14 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<ApiResponse>
 ) {
+  const auth = requireDashboardAuth(req, res);
+  if (!auth.ok) {
+    return res.status(auth.status).json({
+      success: false,
+      message: auth.message,
+    });
+  }
+
   if (req.method !== "POST") {
     return res.status(405).json({
       success: false,

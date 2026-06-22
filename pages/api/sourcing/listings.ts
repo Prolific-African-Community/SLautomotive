@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "../../../lib/prisma";
 import { VehicleInternalStatus } from "@prisma/client";
+import { requireDashboardAuth } from "../../../lib/simple-auth";
 
 type ApiResponse =
   | {
@@ -59,6 +60,14 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<ApiResponse>
 ) {
+  const auth = requireDashboardAuth(req, res);
+  if (!auth.ok) {
+    return res.status(auth.status).json({
+      success: false,
+      message: auth.message,
+    });
+  }
+
   if (req.method === "GET") {
     try {
       const {

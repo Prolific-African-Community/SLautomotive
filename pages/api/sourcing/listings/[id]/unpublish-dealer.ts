@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { DealerVehicleStatus, VehicleInternalStatus } from "@prisma/client";
 import { prisma } from "../../../../../lib/prisma";
 import { ApiResponse, serializeError } from "../../../../../lib/dealer";
+import { requireDashboardAuth } from "../../../../../lib/simple-auth";
 
 export default async function handler(
   req: NextApiRequest,
@@ -13,6 +14,14 @@ export default async function handler(
     return res.status(400).json({
       success: false,
       message: "Invalid listing id.",
+    });
+  }
+
+  const auth = requireDashboardAuth(req, res);
+  if (!auth.ok) {
+    return res.status(auth.status).json({
+      success: false,
+      message: auth.message,
     });
   }
 
