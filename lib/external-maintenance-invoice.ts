@@ -553,6 +553,19 @@ export function resolveSlAutomotivePublicBaseUrl(requestOriginFallback?: string 
   );
 }
 
+async function uploadPublicFeesPdfToBlob(buffer: Buffer, pathname: string) {
+  if (!process.env.BLOB_READ_WRITE_TOKEN?.trim()) {
+    return null;
+  }
+
+  return put(pathname, buffer, {
+    access: "public",
+    addRandomSuffix: false,
+    contentType: "application/pdf",
+    cacheControlMaxAge: 0,
+  });
+}
+
 export async function renderExternalMaintenanceInvoicePdfBuffer(
   request: ExternalMaintenanceInvoiceRequestData,
   invoiceAmount: number,
@@ -801,21 +814,25 @@ export async function storeExternalMaintenanceInvoicePdf(
 ) {
   if (process.env.BLOB_READ_WRITE_TOKEN?.trim()) {
     try {
-      const blob = await put(`external-maintenance/fees/${renderedInvoice.fileName}`, renderedInvoice.buffer, {
-        access: "public",
-        addRandomSuffix: false,
-        contentType: "application/pdf",
-      });
+      const blob = await uploadPublicFeesPdfToBlob(
+        renderedInvoice.buffer,
+        `external-maintenance/fees/${renderedInvoice.fileName}`
+      );
 
-      return {
-        storage: "blob" as const,
-        fileName: renderedInvoice.fileName,
-        invoiceReference: renderedInvoice.invoiceReference,
-        publicPath: renderedInvoice.publicPath,
-        absoluteUrl: blob.url,
-      };
+      if (blob) {
+        return {
+          storage: "blob" as const,
+          fileName: renderedInvoice.fileName,
+          invoiceReference: renderedInvoice.invoiceReference,
+          publicPath: renderedInvoice.publicPath,
+          absoluteUrl: blob.url,
+        };
+      }
     } catch (error) {
-      console.warn("Public Vercel Blob storage failed; using the local fees PDF fallback.", error);
+      console.warn(
+        "Vercel Blob upload failed. Ensure BLOB_READ_WRITE_TOKEN belongs to a public Blob store. Using the local fees PDF fallback.",
+        error
+      );
     }
   }
 
