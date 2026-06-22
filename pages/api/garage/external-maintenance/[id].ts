@@ -279,11 +279,7 @@ export default async function handler(
             status: null,
             statusComment: null,
           }
-        : {
-            data: buildExternalMaintenancePatchData(req.body),
-            status: null,
-            statusComment: null,
-          };
+        : buildExternalMaintenancePatchData(req.body);
 
       const request = await prisma.$transaction(async (tx) => {
         const updated = await tx.externalMaintenanceRequest.update({
