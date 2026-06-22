@@ -2,11 +2,16 @@ import type { GetServerSideProps } from "next";
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
-  EXTERNAL_MAINTENANCE_STATUSES,
   externalMaintenanceInterventionTypeLabel,
+  externalMaintenanceStatusClass,
   externalMaintenanceStatusLabel,
+  externalMaintenanceUrgencyClass,
   externalMaintenanceUrgencyLabel,
   externalMaintenanceVehicleTypeLabel,
+  garageRequestPriorityClass,
+  garageRequestPriorityLabel,
+  garageRequestStatusClass,
+  garageRequestStatusLabel,
 } from "../../lib/external-maintenance-ui";
 import { GARAGE_WHATSAPP_PHONE } from "../../lib/garage-whatsapp";
 import { getDashboardPageAuthRedirect } from "../../lib/simple-auth";
@@ -28,6 +33,7 @@ type GarageRequest = {
   status: string;
   priority: string;
   quoteTotal?: number | null;
+  archivedAt?: string | null;
   createdAt: string;
   interventions: GarageInterventionLine[];
   summary?: {
@@ -102,6 +108,7 @@ type ExternalMaintenanceRequest = {
   invoiceAmount?: number | null;
   quotePdfUrl?: string | null;
   invoicePdfUrl?: string | null;
+  archivedAt?: string | null;
   createdAt: string;
   updatedAt: string;
   statusHistory: ExternalMaintenanceStatusHistory[];
@@ -243,83 +250,11 @@ function formatNumber(value?: number | null) {
 }
 
 function statusLabel(status: string) {
-  const map: Record<string, string> = {
-    ALL: "Tous",
-    NEW: "Nouveau",
-    IN_REVIEW: "En analyse",
-    WAITING_CLIENT: "Attente client",
-    QUOTE_READY: "Frais prêts",
-    QUOTE_SENT: "Frais proposés",
-    ACCEPTED: "Accepté",
-    REJECTED: "Refusé",
-    DONE: "Terminé",
-  };
-
-  return map[status] || status;
+  return status === "ALL" ? "Tous" : garageRequestStatusLabel(status);
 }
 
 function priorityLabel(priority: string) {
-  const map: Record<string, string> = {
-    ALL: "Toutes",
-    LOW: "Basse",
-    NORMAL: "Normale",
-    HIGH: "Haute",
-    URGENT: "Urgente",
-  };
-
-  return map[priority] || priority;
-}
-
-function statusClass(status: string) {
-  if (status === "QUOTE_READY" || status === "QUOTE_SENT") {
-    return "bg-yellow-300 text-black";
-  }
-
-  if (status === "ACCEPTED" || status === "DONE") {
-    return "bg-emerald-400 text-black";
-  }
-
-  if (status === "REJECTED") {
-    return "bg-red-500 text-white";
-  }
-
-  return "bg-white/10 text-zinc-300";
-}
-
-function priorityClass(priority: string) {
-  if (priority === "URGENT") return "border-red-400/50 bg-red-500/15 text-red-200";
-  if (priority === "HIGH") return "border-orange-300/50 bg-orange-400/15 text-orange-100";
-  if (priority === "LOW") return "border-white/10 bg-white/5 text-zinc-400";
-  return "border-yellow-300/30 bg-yellow-300/10 text-yellow-100";
-}
-
-function externalStatusClass(status: string) {
-  if (status === "RECEIVED") return "bg-yellow-300 text-black";
-  if (status === "UNDER_REVIEW" || status === "QUOTE_PREPARING") {
-    return "bg-blue-400 text-black";
-  }
-  if (
-    status === "QUOTE_APPROVED" ||
-    status === "SCHEDULED" ||
-    status === "IN_PROGRESS" ||
-    status === "COMPLETED" ||
-    status === "INVOICED" ||
-    status === "PAID" ||
-    status === "CLOSED"
-  ) {
-    return "bg-emerald-400 text-black";
-  }
-  if (status === "QUOTE_REJECTED" || status === "CANCELLED") {
-    return "bg-red-500 text-white";
-  }
-  return "bg-white/10 text-zinc-300";
-}
-
-function externalUrgencyClass(urgency: string) {
-  if (urgency === "CRITICAL") return "border-red-400/50 bg-red-500/15 text-red-100";
-  if (urgency === "HIGH") return "border-orange-300/50 bg-orange-500/15 text-orange-100";
-  if (urgency === "LOW") return "border-white/10 bg-white/5 text-zinc-400";
-  return "border-yellow-300/30 bg-yellow-300/10 text-yellow-100";
+  return priority === "ALL" ? "Toutes" : garageRequestPriorityLabel(priority);
 }
 
 function toNullableNumber(value: string) {
@@ -370,6 +305,8 @@ export default function GarageDashboard() {
   const [codeSearch, setCodeSearch] = useState("");
   const [codeCategoryFilter, setCodeCategoryFilter] = useState("ALL");
   const [codeStatusFilter, setCodeStatusFilter] = useState("ALL");
+  const [showArchivedRequests, setShowArchivedRequests] = useState(false);
+  const [showArchivedExternal, setShowArchivedExternal] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -467,7 +404,11 @@ export default function GarageDashboard() {
       setLoading(true);
       setError(null);
 
-      const json = await fetchJson<GarageRequest[]>("/api/garage/requests");
+      const params = new URLSearchParams();
+      if (showArchivedRequests) params.set("includeArchived", "true");
+      const json = await fetchJson<GarageRequest[]>(
+        `/api/garage/requests${params.toString() ? `?${params.toString()}` : ""}`
+      );
       setRequests(json.data || []);
     } catch (err: any) {
       setError(err?.message || "Impossible de charger les demandes garage.");
@@ -503,7 +444,11 @@ export default function GarageDashboard() {
       setExternalLoading(true);
       setError(null);
 
-      const json = await fetchJson<ExternalMaintenanceRequest[]>("/api/garage/external-maintenance");
+      const params = new URLSearchParams();
+      if (showArchivedExternal) params.set("includeArchived", "true");
+      const json = await fetchJson<ExternalMaintenanceRequest[]>(
+        `/api/garage/external-maintenance${params.toString() ? `?${params.toString()}` : ""}`
+      );
       setExternalRequests(json.data || []);
     } catch (err: any) {
       setError(err?.message || "Impossible de charger les demandes de maintenance externe.");
@@ -589,6 +534,27 @@ export default function GarageDashboard() {
     }
   }
 
+  async function toggleGarageArchive(request: GarageRequest) {
+    try {
+      setError(null);
+      setMessage(null);
+      await fetchJson<GarageRequest>(`/api/garage/requests/${request.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: request.archivedAt ? "unarchive" : "archive",
+        }),
+      });
+      setMessage(request.archivedAt ? "Demande restaurée." : "Demande archivée.");
+      await loadRequests();
+      if (!request.archivedAt && !showArchivedRequests) {
+        setSelectedGarageRequestId(null);
+      }
+    } catch (err: any) {
+      setError(err?.message || "Archivage impossible.");
+    }
+  }
+
   async function quickExternalStatus(id: string, status: string, statusComment: string) {
     try {
       setExternalActionId(id);
@@ -605,6 +571,30 @@ export default function GarageDashboard() {
       await loadExternalRequests();
     } catch (err: any) {
       setError(err?.message || "Mise à jour maintenance externe impossible.");
+    } finally {
+      setExternalActionId(null);
+    }
+  }
+
+  async function toggleExternalArchive(request: ExternalMaintenanceRequest) {
+    try {
+      setExternalActionId(request.id);
+      setError(null);
+      setMessage(null);
+      await fetchJson<ExternalMaintenanceRequest>(`/api/garage/external-maintenance/${request.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: request.archivedAt ? "unarchive" : "archive",
+        }),
+      });
+      setMessage(request.archivedAt ? "Demande externe restaurée." : "Demande externe archivée.");
+      await loadExternalRequests();
+      if (!request.archivedAt && !showArchivedExternal) {
+        setSelectedExternalRequestId(null);
+      }
+    } catch (err: any) {
+      setError(err?.message || "Archivage maintenance externe impossible.");
     } finally {
       setExternalActionId(null);
     }
@@ -842,13 +832,13 @@ export default function GarageDashboard() {
 
   useEffect(() => {
     loadRequests();
-  }, []);
+  }, [showArchivedRequests]);
 
   useEffect(() => {
     if (activeTab !== "external") return;
     loadExternalRequests();
     if (codes.length === 0) loadCodes();
-  }, [activeTab]);
+  }, [activeTab, showArchivedExternal]);
 
   useEffect(() => {
     if (activeTab !== "codes") return;
@@ -1056,6 +1046,16 @@ export default function GarageDashboard() {
               </select>
             </section>
 
+            <div className="flex justify-end">
+              <button
+                type="button"
+                className={ghostButtonClass}
+                onClick={() => setShowArchivedRequests((current) => !current)}
+              >
+                {showArchivedRequests ? "Voir actives" : "Voir archivées"}
+              </button>
+            </div>
+
             {selectedGarageRequest ? (
               <button
                 type="button"
@@ -1124,11 +1124,11 @@ export default function GarageDashboard() {
                         </div>
                         <p className="text-xs text-zinc-400">{request.plateNumber || "-"}</p>
                         <p className="text-xs text-zinc-300">{request.problemType || "Diagnostic à qualifier"}</p>
-                        <span className={`w-fit rounded-full px-2 py-1 text-[10px] font-bold ${statusClass(request.status)}`}>
+                        <span className={`w-fit rounded-full px-2 py-1 text-[10px] font-bold ${garageRequestStatusClass(request.status)}`}>
                           {statusLabel(request.status)}
                         </span>
                         <span
-                          className={`w-fit rounded-full border px-2 py-1 text-[10px] font-bold ${priorityClass(
+                          className={`w-fit rounded-full border px-2 py-1 text-[10px] font-bold ${garageRequestPriorityClass(
                             request.priority
                           )}`}
                         >
@@ -1185,14 +1185,14 @@ export default function GarageDashboard() {
                     <div>
                       <div className="flex flex-wrap gap-2">
                         <span
-                          className={`rounded-full px-3 py-1 text-xs font-bold ${statusClass(
+                          className={`rounded-full px-3 py-1 text-xs font-bold ${garageRequestStatusClass(
                             selectedGarageRequest.status
                           )}`}
                         >
                           {statusLabel(selectedGarageRequest.status)}
                         </span>
                         <span
-                          className={`rounded-full border px-3 py-1 text-xs font-bold ${priorityClass(
+                          className={`rounded-full border px-3 py-1 text-xs font-bold ${garageRequestPriorityClass(
                             selectedGarageRequest.priority
                           )}`}
                         >
@@ -1210,6 +1210,11 @@ export default function GarageDashboard() {
                         {hasQuote ? (
                           <span className="rounded-full border border-yellow-300/40 bg-yellow-300/10 px-3 py-1 text-xs font-bold text-yellow-100">
                             Frais prêts
+                          </span>
+                        ) : null}
+                        {selectedGarageRequest.archivedAt ? (
+                          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-bold text-zinc-400">
+                            Archivée
                           </span>
                         ) : null}
                       </div>
@@ -1327,6 +1332,13 @@ export default function GarageDashboard() {
                     <Link href={`/dashboard/garage/${selectedGarageRequest.id}`}>
                       <a className={buttonClass}>Ouvrir fiche complète</a>
                     </Link>
+                    <button
+                      type="button"
+                      className={ghostButtonClass}
+                      onClick={() => void toggleGarageArchive(selectedGarageRequest)}
+                    >
+                      {selectedGarageRequest.archivedAt ? "Désarchiver" : "Archiver"}
+                    </button>
                   </div>
                 </section>
               );
@@ -1355,17 +1367,14 @@ export default function GarageDashboard() {
               ))}
             </section>
 
-            <div className="bg-zinc-950 rounded-3xl border border-white/10 p-4">
-              <div className="flex flex-wrap gap-2">
-                {EXTERNAL_MAINTENANCE_STATUSES.map((status) => (
-                  <span
-                    key={status}
-                    className={`rounded-full px-3 py-1 text-xs font-bold ${externalStatusClass(status)}`}
-                  >
-                    {externalMaintenanceStatusLabel(status)}
-                  </span>
-                ))}
-              </div>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                className={ghostButtonClass}
+                onClick={() => setShowArchivedExternal((current) => !current)}
+              >
+                {showArchivedExternal ? "Voir actives" : "Voir archivées"}
+              </button>
             </div>
 
             {selectedExternalRequest ? (
@@ -1429,14 +1438,14 @@ export default function GarageDashboard() {
                             {externalMaintenanceInterventionTypeLabel(request.interventionType)}
                           </p>
                           <span
-                            className={`w-fit rounded-full border px-2 py-1 text-[10px] font-bold ${externalUrgencyClass(
+                            className={`w-fit rounded-full border px-2 py-1 text-[10px] font-bold ${externalMaintenanceUrgencyClass(
                               request.urgency
                             )}`}
                           >
                             {externalMaintenanceUrgencyLabel(request.urgency)}
                           </span>
                           <span
-                            className={`w-fit rounded-full px-2 py-1 text-[10px] font-bold ${externalStatusClass(
+                            className={`w-fit rounded-full px-2 py-1 text-[10px] font-bold ${externalMaintenanceStatusClass(
                               request.status
                             )}`}
                           >
@@ -1486,14 +1495,14 @@ export default function GarageDashboard() {
                             <div>
                               <div className="flex flex-wrap gap-2">
                                 <span
-                                  className={`rounded-full px-3 py-1 text-xs font-bold ${externalStatusClass(
+                                  className={`rounded-full px-3 py-1 text-xs font-bold ${externalMaintenanceStatusClass(
                                     request.status
                                   )}`}
                                 >
                                   {externalMaintenanceStatusLabel(request.status)}
                                 </span>
                                 <span
-                                  className={`rounded-full border px-3 py-1 text-xs font-bold ${externalUrgencyClass(
+                                  className={`rounded-full border px-3 py-1 text-xs font-bold ${externalMaintenanceUrgencyClass(
                                     request.urgency
                                   )}`}
                                 >
@@ -1518,6 +1527,11 @@ export default function GarageDashboard() {
                                       : latestDelivery.status === "FAILED"
                                       ? "Échec synchro"
                                       : "En attente"}
+                                  </span>
+                                ) : null}
+                                {request.archivedAt ? (
+                                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-bold text-zinc-400">
+                                    Archivée
                                   </span>
                                 ) : null}
                               </div>
@@ -1913,6 +1927,13 @@ export default function GarageDashboard() {
                                   Annuler
                                 </button>
                               ) : null}
+                              <button
+                                className={ghostButtonClass}
+                                onClick={() => void toggleExternalArchive(request)}
+                                disabled={externalActionId === request.id}
+                              >
+                                {request.archivedAt ? "Désarchiver" : "Archiver"}
+                              </button>
                             </div>
                           </div>
                         </>

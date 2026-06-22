@@ -65,7 +65,9 @@ export default async function handler(
     }
 
     try {
+      const includeArchived = req.query.includeArchived === "true";
       const requests = await prisma.garageRequest.findMany({
+        where: includeArchived ? {} : { archivedAt: null },
         orderBy: {
           createdAt: "desc",
         },

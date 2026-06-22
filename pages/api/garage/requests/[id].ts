@@ -124,9 +124,17 @@ export default async function handler(
 
   if (req.method === "PATCH") {
     try {
+      const action = typeof req.body?.action === "string" ? req.body.action : null;
+      const patchData =
+        action === "archive"
+          ? { archivedAt: new Date() }
+          : action === "unarchive"
+          ? { archivedAt: null }
+          : buildPatchData(req.body);
+
       const request = await prisma.garageRequest.update({
         where: { id },
-        data: buildPatchData(req.body),
+        data: patchData,
         include: {
           interventions: {
             orderBy: {

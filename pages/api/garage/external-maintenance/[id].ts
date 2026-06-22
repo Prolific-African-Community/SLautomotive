@@ -121,6 +121,8 @@ export default async function handler(
 
       const isSendQuote = req.body?.action === "send_quote";
       const isSendInvoice = req.body?.action === "send_invoice";
+      const isArchive = req.body?.action === "archive";
+      const isUnarchive = req.body?.action === "unarchive";
 
       // Compute quote amount: lines total takes precedence over manual amount
       const linesTotal =
@@ -261,7 +263,27 @@ export default async function handler(
             status: ExternalMaintenanceStatus.QUOTE_SENT,
             statusComment: quoteStatusComment,
           }
-        : buildExternalMaintenancePatchData(req.body);
+        : isArchive
+        ? {
+            data: {
+              archivedAt: new Date(),
+            },
+            status: null,
+            statusComment: null,
+          }
+        : isUnarchive
+        ? {
+            data: {
+              archivedAt: null,
+            },
+            status: null,
+            statusComment: null,
+          }
+        : {
+            data: buildExternalMaintenancePatchData(req.body),
+            status: null,
+            statusComment: null,
+          };
 
       const request = await prisma.$transaction(async (tx) => {
         const updated = await tx.externalMaintenanceRequest.update({

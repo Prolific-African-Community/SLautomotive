@@ -10,6 +10,13 @@ import {
   verifyNovoTraluxApiKey,
 } from "../../../../lib/external-maintenance";
 
+const EXTERNAL_URGENCY_ORDER: Record<string, number> = {
+  CRITICAL: 0,
+  HIGH: 1,
+  NORMAL: 2,
+  LOW: 3,
+};
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<ApiResponse>
@@ -24,8 +31,10 @@ export default async function handler(
     }
 
     try {
+      const includeArchived = req.query.includeArchived === "true";
       const requests = await prisma.externalMaintenanceRequest.findMany({
-        orderBy: [{ urgency: "desc" }, { createdAt: "desc" }],
+        where: includeArchived ? {} : { archivedAt: null },
+        orderBy: [{ createdAt: "desc" }],
         include: {
           statusHistory: {
             orderBy: {
@@ -46,7 +55,16 @@ export default async function handler(
 
       return res.status(200).json({
         success: true,
-        data: requests,
+        data: [...requests].sort((a, b) => {
+          const urgencyDelta =
+            (EXTERNAL_URGENCY_ORDER[a.urgency] ?? 99) - (EXTERNAL_URGENCY_ORDER[b.urgency] ?? 99);
+
+          if (urgencyDelta !== 0) {
+            return urgencyDelta;
+          }
+
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        }),
       });
     } catch (error: any) {
       console.error("GET /api/garage/external-maintenance error:", error);
