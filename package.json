@@ -4,6 +4,7 @@
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start",
+    "cleanup:sl-dashboard-requests": "node scripts/cleanup-sl-dashboard-requests.js",
     "postinstall": "prisma generate"
   },
   "dependencies": {
