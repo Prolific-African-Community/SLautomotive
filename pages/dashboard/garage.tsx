@@ -411,7 +411,7 @@ export default function GarageDashboard() {
       setError(null);
 
       const params = new URLSearchParams();
-      if (showArchivedRequests) params.set("includeArchived", "true");
+      if (showArchivedRequests) params.set("archived", "true");
       const json = await fetchJson<GarageRequest[]>(
         `/api/garage/requests${params.toString() ? `?${params.toString()}` : ""}`
       );
@@ -451,7 +451,7 @@ export default function GarageDashboard() {
       setError(null);
 
       const params = new URLSearchParams();
-      if (showArchivedExternal) params.set("includeArchived", "true");
+      if (showArchivedExternal) params.set("archived", "true");
       const json = await fetchJson<ExternalMaintenanceRequest[]>(
         `/api/garage/external-maintenance${params.toString() ? `?${params.toString()}` : ""}`
       );
@@ -894,10 +894,20 @@ export default function GarageDashboard() {
     loadCodes();
   }, [activeTab, codeCategoryFilter, codeSearch, codeStatusFilter]);
 
+  // Safety net: enforce the active/archived separation client-side too, so the
+  // list never mixes both even if the API ever returns an unexpected set.
+  const scopedRequests = useMemo(
+    () =>
+      requests.filter((request) =>
+        showArchivedRequests ? request.archivedAt != null : request.archivedAt == null
+      ),
+    [requests, showArchivedRequests]
+  );
+
   const filteredRequests = useMemo(() => {
     const term = search.trim().toLowerCase();
 
-    return requests.filter((request) => {
+    return scopedRequests.filter((request) => {
       const searchable = [
         request.firstName,
         request.lastName,
@@ -919,16 +929,17 @@ export default function GarageDashboard() {
         (priorityFilter === "ALL" || request.priority === priorityFilter)
       );
     });
-  }, [priorityFilter, requests, search, statusFilter]);
+  }, [priorityFilter, scopedRequests, search, statusFilter]);
 
   const kpis = useMemo(() => {
-    const count = (status: string) => requests.filter((request) => request.status === status).length;
-    const potentialRevenue = requests
+    const count = (status: string) =>
+      scopedRequests.filter((request) => request.status === status).length;
+    const potentialRevenue = scopedRequests
       .filter((request) => ["QUOTE_READY", "QUOTE_SENT", "ACCEPTED"].includes(request.status))
       .reduce((sum, request) => sum + (request.quoteTotal || 0), 0);
 
     return [
-      { label: "Total demandes", value: requests.length.toString() },
+      { label: "Total demandes", value: scopedRequests.length.toString() },
       { label: "Nouvelles", value: count("NEW").toString() },
       { label: "En analyse", value: count("IN_REVIEW").toString() },
       { label: "Frais prêts", value: count("QUOTE_READY").toString() },
@@ -936,7 +947,7 @@ export default function GarageDashboard() {
       { label: "Acceptées", value: count("ACCEPTED").toString() },
       { label: "CA potentiel", value: formatMoney(potentialRevenue) },
     ];
-  }, [requests]);
+  }, [scopedRequests]);
 
   const availableCodeCategories = useMemo(() => {
     const dynamicCategories = codes.map((code) => code.category).filter(Boolean);
@@ -952,11 +963,21 @@ export default function GarageDashboard() {
     [codes]
   );
 
+  // Same safety net for the external maintenance queue.
+  const scopedExternalRequests = useMemo(
+    () =>
+      externalRequests.filter((request) =>
+        showArchivedExternal ? request.archivedAt != null : request.archivedAt == null
+      ),
+    [externalRequests, showArchivedExternal]
+  );
+
   const externalKpis = useMemo(() => {
-    const count = (status: string) => externalRequests.filter((request) => request.status === status).length;
+    const count = (status: string) =>
+      scopedExternalRequests.filter((request) => request.status === status).length;
 
     return [
-      { label: "Total queue", value: externalRequests.length.toString() },
+      { label: "Total queue", value: scopedExternalRequests.length.toString() },
       { label: "Reçues", value: count("RECEIVED").toString() },
       { label: "En analyse", value: count("UNDER_REVIEW").toString() },
       {
@@ -966,10 +987,12 @@ export default function GarageDashboard() {
       { label: "Frais à préparer", value: count("QUOTE_PREPARING").toString() },
       {
         label: "Urgences critiques",
-        value: externalRequests.filter((request) => request.urgency === "CRITICAL").length.toString(),
+        value: scopedExternalRequests
+          .filter((request) => request.urgency === "CRITICAL")
+          .length.toString(),
       },
     ];
-  }, [externalRequests]);
+  }, [scopedExternalRequests]);
 
   const selectedGarageRequest = requests.find((request) => request.id === selectedGarageRequestId) ?? null;
   const selectedExternalRequest = externalRequests.find((request) => request.id === selectedExternalRequestId) ?? null;
@@ -1121,7 +1144,11 @@ export default function GarageDashboard() {
                 </div>
               ) : filteredRequests.length === 0 ? (
                 <div className="bg-zinc-950 rounded-3xl border border-white/10 p-6 text-zinc-300">
-                  Aucune demande ne correspond aux filtres.
+                  {scopedRequests.length === 0
+                    ? showArchivedRequests
+                      ? "Aucune demande archivée."
+                      : "Aucune demande active."
+                    : "Aucune demande ne correspond aux filtres."}
                 </div>
               ) : (
                 <>
@@ -1504,12 +1531,14 @@ export default function GarageDashboard() {
                 <div className="bg-zinc-950 rounded-3xl border border-white/10 p-6 text-zinc-300">
                   Chargement de la queue maintenance externe...
                 </div>
-              ) : externalRequests.length === 0 ? (
+              ) : scopedExternalRequests.length === 0 ? (
                 <div className="bg-zinc-950 rounded-3xl border border-white/10 p-6 text-zinc-300">
-                  Aucune demande de maintenance externe reçue pour le moment.
+                  {showArchivedExternal
+                    ? "Aucune demande externe archivée."
+                    : "Aucune demande externe active."}
                 </div>
               ) : (
-                externalRequests.map((request) => {
+                scopedExternalRequests.map((request) => {
                   const latestComment = request.statusHistory[0]?.comment;
                   const latestDelivery = request.webhookDeliveries[0];
 
