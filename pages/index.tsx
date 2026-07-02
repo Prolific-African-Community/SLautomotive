@@ -1026,7 +1026,7 @@ export default function GaragePage() {
               </div>
               <div className="border border-zinc-800 p-5">
                 <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">Adresse</p>
-                <p className="mt-2 font-black">Luxembourg / Grande Région</p>
+                <p className="mt-2 font-black">SED-X Industrial Hub, 08200, France</p>
               </div>
             </div>
           </div>
