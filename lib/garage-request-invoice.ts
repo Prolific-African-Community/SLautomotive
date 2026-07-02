@@ -3,41 +3,50 @@ import fsSync from "fs";
 import path from "path";
 import { put } from "@vercel/blob";
 import PDFDocument from "pdfkit";
-import type { ExternalMaintenanceRequest } from "@prisma/client";
+import type { GarageInterventionLine, GarageRequest } from "@prisma/client";
 import {
-  externalMaintenanceInterventionTypeLabel,
-  externalMaintenanceVehicleTypeLabel,
-} from "./external-maintenance-ui";
+  hasVercelBlobCredentials,
+  resolveSlAutomotivePublicBaseUrl,
+} from "./external-maintenance-invoice";
 import {
   SL_AUTOMOTIVE_ISSUER_TEXT,
   SL_AUTOMOTIVE_PAYMENT_TEXT,
 } from "./sl-invoice-config";
 
-const GENERATED_FEES_DIR = path.join(process.cwd(), "public", "generated", "fees");
+const GENERATED_GARAGE_INVOICES_DIR = path.join(
+  process.cwd(),
+  "public",
+  "generated",
+  "garage-invoices"
+);
 
-export type ExternalMaintenanceInvoiceRequestData = Pick<
-  ExternalMaintenanceRequest,
+export type GarageInvoiceRequestData = Pick<
+  GarageRequest,
   | "id"
-  | "externalRequestId"
-  | "vehicleType"
+  | "firstName"
+  | "lastName"
+  | "email"
+  | "phone"
+  | "vehicleBrand"
+  | "vehicleModel"
+  | "vehicleYear"
+  | "mileage"
   | "plateNumber"
-  | "interventionType"
-  | "issueDescription"
+  | "problemType"
+  | "symptoms"
+  | "description"
+  | "invoiceNumber"
 >;
 
-export type ExternalMaintenanceInvoiceLine = {
-  code?: string | null;
-  label: string;
-  description?: string | null;
-  qty: number;
-  unitPrice: number;
-  total: number;
-};
+export type GarageInvoiceLine = Pick<
+  GarageInterventionLine,
+  "code" | "label" | "category" | "qty" | "unitPrice" | "total"
+>;
 
-type RenderedExternalMaintenanceInvoicePdf = {
+type RenderedGarageInvoicePdf = {
   buffer: Buffer;
   fileName: string;
-  invoiceReference: string;
+  invoiceNumber: string;
   publicPath: string;
 };
 
@@ -102,7 +111,7 @@ const LOGO_CANDIDATES = [
 
 const TABLE_COLUMNS: TableColumn[] = [
   { key: "description", label: "DESCRIPTION", width: TABLE_DESCRIPTION_WIDTH, align: "left" },
-  { key: "qty", label: "QTY", width: TABLE_QTY_WIDTH, align: "center" },
+  { key: "qty", label: "QTÉ", width: TABLE_QTY_WIDTH, align: "center" },
   { key: "unitPrice", label: "P.U.", width: TABLE_UNIT_PRICE_WIDTH, align: "right" },
   { key: "total", label: "TOTAL", width: TABLE_TOTAL_WIDTH, align: "right" },
 ];
@@ -130,10 +139,6 @@ function slugify(value: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 48);
-}
-
-function normalizeBaseUrl(value: string) {
-  return value.trim().replace(/\/+$/, "");
 }
 
 function safeText(value?: string | null) {
@@ -175,12 +180,15 @@ function parseOptionalVatRate() {
   return parsed > 1 ? parsed / 100 : parsed;
 }
 
-function calculateTotals(amount: number, lines: ExternalMaintenanceInvoiceLine[]): Totals {
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function calculateTotals(lines: GarageInvoiceLine[]): Totals {
   const vatRate = parseOptionalVatRate();
-  const lineSubtotal = lines.reduce((sum, line) => sum + line.total, 0);
-  const subtotal = lineSubtotal > 0 ? lineSubtotal : amount;
-  const vatAmount = vatRate !== null ? subtotal * vatRate : null;
-  const total = vatAmount !== null ? subtotal + vatAmount : subtotal;
+  const subtotal = roundMoney(lines.reduce((sum, line) => sum + line.total, 0));
+  const vatAmount = vatRate !== null ? roundMoney(subtotal * vatRate) : null;
+  const total = vatAmount !== null ? roundMoney(subtotal + vatAmount) : subtotal;
 
   return {
     subtotal,
@@ -190,35 +198,18 @@ function calculateTotals(amount: number, lines: ExternalMaintenanceInvoiceLine[]
   };
 }
 
-function buildInvoiceLines(lines: ExternalMaintenanceInvoiceLine[] | undefined, amount: number) {
-  if (lines && lines.length > 0) {
-    return lines.map((line) => ({
-      ...line,
-      code: line.code ?? null,
-      label: safeText(line.label),
-      description: line.description?.trim() ? safeMultilineText(line.description) : null,
-      qty: line.qty || 1,
-      unitPrice: line.unitPrice,
-      total: line.total,
-    }));
-  }
-
-  return [
-    {
-      code: null,
-      label: "Frais d'intervention",
-      description: "Montant global d'intervention transmis pour la prise en charge.",
-      qty: 1,
-      unitPrice: amount,
-      total: amount,
-    },
-  ];
-}
-
-function buildInvoiceReference(request: ExternalMaintenanceInvoiceRequestData) {
-  const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+/**
+ * Deterministic, stable invoice number for a given garage request. Calling it
+ * again for the same request/year yields the same reference, so regenerating a
+ * PDF never mints a new number.
+ */
+export function buildGarageInvoiceNumber(
+  request: Pick<GarageInvoiceRequestData, "id">,
+  referenceDate: Date = new Date()
+) {
+  const year = referenceDate.getFullYear();
   const shortId = request.id.slice(-6).toUpperCase();
-  return `SLA-FEES-${datePart}-${shortId}`;
+  return `SL-GAR-${year}-${shortId}`;
 }
 
 function applyPageBackground(doc: InstanceType<typeof PDFDocument>) {
@@ -416,16 +407,21 @@ function drawTableHeader(doc: InstanceType<typeof PDFDocument>, x: number, y: nu
   doc.restore();
 }
 
-function measureInterventionRowHeight(
-  doc: InstanceType<typeof PDFDocument>,
-  line: ExternalMaintenanceInvoiceLine,
-  widths: number[]
-) {
-  const descriptionWidth = widths[0] - 24;
+function lineDescriptionParts(line: GarageInvoiceLine) {
   const primaryText = line.code?.trim()
     ? `${sanitizeSingleLine(line.code)} - ${sanitizeSingleLine(line.label)}`
     : safeText(line.label);
-  const secondaryText = line.description?.trim() ? safeMultilineText(line.description) : "";
+  const secondaryText = line.category?.trim() ? sanitizeSingleLine(line.category) : "";
+  return { primaryText, secondaryText };
+}
+
+function measureInterventionRowHeight(
+  doc: InstanceType<typeof PDFDocument>,
+  line: GarageInvoiceLine,
+  widths: number[]
+) {
+  const descriptionWidth = widths[0] - 24;
+  const { primaryText, secondaryText } = lineDescriptionParts(line);
   const primaryHeight = measureWrappedTextHeight(doc, primaryText, descriptionWidth, {
     font: "Helvetica-Bold",
     fontSize: BODY_FONT_SIZE,
@@ -447,7 +443,7 @@ function measureInterventionRowHeight(
 
 function drawInterventionRow(
   doc: InstanceType<typeof PDFDocument>,
-  line: ExternalMaintenanceInvoiceLine,
+  line: GarageInvoiceLine,
   x: number,
   y: number,
   widths: number[],
@@ -455,10 +451,7 @@ function drawInterventionRow(
   shade: boolean
 ) {
   const descriptionWidth = widths[0] - 24;
-  const primaryText = line.code?.trim()
-    ? `${sanitizeSingleLine(line.code)} - ${sanitizeSingleLine(line.label)}`
-    : safeText(line.label);
-  const secondaryText = line.description?.trim() ? safeMultilineText(line.description) : "";
+  const { primaryText, secondaryText } = lineDescriptionParts(line);
 
   drawRoundedBox(doc, x, y, TABLE_WIDTH, height, {
     fillColor: shade ? "#fbf8f2" : "#fffdf8",
@@ -517,14 +510,12 @@ function drawFooter(doc: InstanceType<typeof PDFDocument>, y: number) {
     .stroke();
 
   drawSectionTitle(doc, "PAIEMENT", MARGIN_X, y + 14);
-  drawWrappedText(
-    doc,
-    SL_AUTOMOTIVE_PAYMENT_TEXT,
-    MARGIN_X,
-    y + 30,
-    240,
-    { font: "Helvetica", fontSize: SMALL_FONT_SIZE + 0.5, fillColor: TEXT_COLOR, lineGap: 2 }
-  );
+  drawWrappedText(doc, SL_AUTOMOTIVE_PAYMENT_TEXT, MARGIN_X, y + 30, 240, {
+    font: "Helvetica",
+    fontSize: SMALL_FONT_SIZE + 0.5,
+    fillColor: TEXT_COLOR,
+    lineGap: 2,
+  });
 
   drawSectionTitle(doc, "CONDITIONS", rightX, y + 14);
   drawWrappedText(doc, "Paiement sous 10 jours", rightX, y + 30, 170, {
@@ -541,65 +532,47 @@ function drawFooter(doc: InstanceType<typeof PDFDocument>, y: number) {
   });
 }
 
-export function resolveSlAutomotivePublicBaseUrl(requestOriginFallback?: string | null) {
-  const configuredBaseUrl = process.env.SL_AUTOMOTIVE_PUBLIC_BASE_URL?.trim();
+function buildClientText(request: GarageInvoiceRequestData) {
+  const name =
+    [request.firstName, request.lastName].filter((part) => part?.trim()).join(" ").trim() ||
+    "Client non renseigné";
+  const lines = [name.toUpperCase()];
 
-  if (configuredBaseUrl) {
-    return normalizeBaseUrl(configuredBaseUrl);
-  }
+  if (request.phone?.trim()) lines.push(sanitizeSingleLine(request.phone));
+  if (request.email?.trim()) lines.push(sanitizeSingleLine(request.email));
 
-  if (requestOriginFallback?.trim()) {
-    return normalizeBaseUrl(requestOriginFallback);
-  }
+  return lines.join("\n");
+}
 
-  throw new Error(
-    "Unable to determine SL Automotive public base URL. Set SL_AUTOMOTIVE_PUBLIC_BASE_URL."
+function buildVehicleLabel(request: GarageInvoiceRequestData) {
+  return (
+    [request.vehicleBrand, request.vehicleModel, request.vehicleYear]
+      .filter((part) => part !== null && part !== undefined && String(part).trim())
+      .join(" ")
+      .trim() || "Véhicule à préciser"
   );
 }
 
-async function uploadPublicFeesPdfToBlob(buffer: Buffer, pathname: string) {
-  return put(pathname, buffer, {
-    access: "public",
-    addRandomSuffix: false,
-    contentType: "application/pdf",
-    cacheControlMaxAge: 0,
-  });
-}
-
-export function hasVercelBlobCredentials() {
-  const hasReadWriteToken = Boolean(
-    process.env.BLOB_READ_WRITE_TOKEN?.trim()
-  );
-  const hasOidcCredentials = Boolean(
-    process.env.VERCEL_OIDC_TOKEN?.trim() && process.env.BLOB_STORE_ID?.trim()
-  );
-
-  return hasReadWriteToken || hasOidcCredentials;
-}
-
-export class ExternalMaintenancePdfStorageError extends Error {
+export class GarageRequestPdfStorageError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "ExternalMaintenancePdfStorageError";
+    this.name = "GarageRequestPdfStorageError";
   }
 }
 
-export async function renderExternalMaintenanceInvoicePdfBuffer(
-  request: ExternalMaintenanceInvoiceRequestData,
-  invoiceAmount: number,
-  statusComment?: string | null,
-  lines?: ExternalMaintenanceInvoiceLine[]
-): Promise<RenderedExternalMaintenanceInvoicePdf> {
-  const invoiceReference = buildInvoiceReference(request);
+export async function renderGarageRequestInvoicePdfBuffer(
+  request: GarageInvoiceRequestData,
+  lines: GarageInvoiceLine[],
+  invoiceNumber: string
+): Promise<RenderedGarageInvoicePdf> {
   const version = Date.now();
-  const fileName = `${invoiceReference}-v${version}-${slugify(
-    request.plateNumber || request.externalRequestId || request.id
+  const fileName = `${invoiceNumber}-v${version}-${slugify(
+    request.plateNumber || request.id
   )}.pdf`;
-  const publicPath = `/generated/fees/${fileName}`;
+  const publicPath = `/generated/garage-invoices/${fileName}`;
   const invoiceDate = new Date();
   const logoPath = getResolvedLogoPath();
-  const resolvedLines = buildInvoiceLines(lines, invoiceAmount);
-  const totals = calculateTotals(invoiceAmount, resolvedLines);
+  const totals = calculateTotals(lines);
 
   const buffer = await new Promise<Buffer>((resolve, reject) => {
     const doc = new PDFDocument({
@@ -623,7 +596,7 @@ export async function renderExternalMaintenanceInvoicePdfBuffer(
     const tableColumnWidths = TABLE_COLUMNS.map((column) => column.width);
     let cursorY = MARGIN_TOP;
 
-    const titleText = "FRAIS D’INTERVENTION";
+    const titleText = "FACTURE";
     const titleHeight = measureWrappedTextHeight(doc, titleText, 280, {
       font: "Helvetica-Bold",
       fontSize: TITLE_FONT_SIZE,
@@ -638,7 +611,7 @@ export async function renderExternalMaintenanceInvoicePdfBuffer(
     });
 
     const pillsY = cursorY + titleHeight + 18;
-    drawPill(doc, MARGIN_X, pillsY, 230, `Référence : ${invoiceReference}`);
+    drawPill(doc, MARGIN_X, pillsY, 230, `Facture : ${invoiceNumber}`);
     drawPill(doc, MARGIN_X + 242, pillsY, 118, formatShortDate(invoiceDate));
 
     const logoBoxX = MARGIN_X + CONTENT_WIDTH - logoBoxWidth;
@@ -670,17 +643,23 @@ export async function renderExternalMaintenanceInvoicePdfBuffer(
     cursorY += SECTION_GAP;
 
     const issuerText = SL_AUTOMOTIVE_ISSUER_TEXT;
-    const clientText = "NOVOTRALUX S.À R.L.\n21 Stawelerstrooss, 9964\nHuldang Ëlwen,\nLuxembourg";
-    const issuerHeight = BOX_PADDING * 2 + 18 + measureWrappedTextHeight(doc, issuerText, issuerWidth - BOX_PADDING * 2, {
-      font: "Helvetica",
-      fontSize: BODY_FONT_SIZE,
-      lineGap: 3,
-    });
-    const clientHeight = BOX_PADDING * 2 + 18 + measureWrappedTextHeight(doc, clientText, clientWidth - BOX_PADDING * 2, {
-      font: "Helvetica-Bold",
-      fontSize: BODY_FONT_SIZE + 0.5,
-      lineGap: 3,
-    });
+    const clientText = buildClientText(request);
+    const issuerHeight =
+      BOX_PADDING * 2 +
+      18 +
+      measureWrappedTextHeight(doc, issuerText, issuerWidth - BOX_PADDING * 2, {
+        font: "Helvetica",
+        fontSize: BODY_FONT_SIZE,
+        lineGap: 3,
+      });
+    const clientHeight =
+      BOX_PADDING * 2 +
+      18 +
+      measureWrappedTextHeight(doc, clientText, clientWidth - BOX_PADDING * 2, {
+        font: "Helvetica-Bold",
+        fontSize: BODY_FONT_SIZE + 0.5,
+        lineGap: 3,
+      });
     const contactCardsHeight = Math.max(issuerHeight, clientHeight);
 
     drawRoundedBox(doc, MARGIN_X, cursorY, issuerWidth, contactCardsHeight);
@@ -694,7 +673,7 @@ export async function renderExternalMaintenanceInvoicePdfBuffer(
 
     const clientX = MARGIN_X + issuerWidth + cardGap;
     drawRoundedBox(doc, clientX, cursorY, clientWidth, contactCardsHeight);
-    drawSectionTitle(doc, "À L’ATTENTION DE", clientX + BOX_PADDING, cursorY + BOX_PADDING - 2);
+    drawSectionTitle(doc, "FACTURÉ À", clientX + BOX_PADDING, cursorY + BOX_PADDING - 2);
     drawWrappedText(doc, clientText, clientX + BOX_PADDING, cursorY + BOX_PADDING + 18, clientWidth - BOX_PADDING * 2, {
       font: "Helvetica-Bold",
       fontSize: BODY_FONT_SIZE + 0.5,
@@ -705,12 +684,22 @@ export async function renderExternalMaintenanceInvoicePdfBuffer(
     cursorY += contactCardsHeight + SECTION_GAP;
 
     const dossierRows: KeyValueRow[] = [
-      { key: "Plaque véhicule", value: safeText(request.plateNumber || "Non renseignée") },
-      { key: "Type véhicule", value: safeText(externalMaintenanceVehicleTypeLabel(request.vehicleType)) },
-      { key: "Type intervention", value: safeText(externalMaintenanceInterventionTypeLabel(request.interventionType)) },
-      { key: "SL request id", value: safeText(request.id) },
-      { key: "NovoTralux request id", value: safeText(request.externalRequestId) },
-      { key: "Signalement", value: safeMultilineText(request.issueDescription || "Non renseigné") },
+      { key: "Véhicule", value: safeText(buildVehicleLabel(request)) },
+      { key: "Plaque", value: safeText(request.plateNumber || "Non renseignée") },
+      {
+        key: "Kilométrage",
+        value:
+          request.mileage !== null && request.mileage !== undefined
+            ? `${new Intl.NumberFormat("fr-LU").format(request.mileage)} km`
+            : "Non renseigné",
+      },
+      { key: "Demande", value: safeText(request.problemType || "Diagnostic à qualifier") },
+      {
+        key: "Symptômes",
+        value: safeText(request.symptoms.length > 0 ? request.symptoms.join(", ") : "Aucun"),
+      },
+      { key: "Détails", value: safeMultilineText(request.description || "Non renseigné") },
+      { key: "Référence dossier", value: safeText(request.id) },
     ];
 
     const dossierHeight = measureKeyValueBlockHeight(doc, dossierRows, CONTENT_WIDTH);
@@ -727,7 +716,7 @@ export async function renderExternalMaintenanceInvoicePdfBuffer(
     drawTableHeader(doc, MARGIN_X, cursorY, tableColumnWidths);
     cursorY += TABLE_HEADER_HEIGHT;
 
-    resolvedLines.forEach((line, index) => {
+    lines.forEach((line, index) => {
       const rowHeight = measureInterventionRowHeight(doc, line, tableColumnWidths);
       if (!ensurePageSpace(cursorY, rowHeight)) {
         addNewPageWithBackground(doc);
@@ -780,32 +769,6 @@ export async function renderExternalMaintenanceInvoicePdfBuffer(
     });
     cursorY += totalsHeight + SECTION_GAP;
 
-    if (statusComment?.trim()) {
-      const noteText = safeMultilineText(statusComment);
-      const noteHeight = Math.max(
-        64,
-        34 +
-          measureWrappedTextHeight(doc, noteText, CONTENT_WIDTH - BOX_PADDING * 2, {
-            font: "Helvetica",
-            fontSize: SMALL_FONT_SIZE + 0.5,
-            lineGap: 2,
-          })
-      );
-      if (!ensurePageSpace(cursorY, noteHeight)) {
-        addNewPageWithBackground(doc);
-        cursorY = MARGIN_TOP;
-      }
-      drawRoundedBox(doc, MARGIN_X, cursorY, CONTENT_WIDTH, noteHeight);
-      drawSectionTitle(doc, "NOTE", MARGIN_X + BOX_PADDING, cursorY + 14);
-      drawWrappedText(doc, noteText, MARGIN_X + BOX_PADDING, cursorY + 32, CONTENT_WIDTH - BOX_PADDING * 2, {
-        font: "Helvetica",
-        fontSize: SMALL_FONT_SIZE + 0.5,
-        fillColor: TEXT_COLOR,
-        lineGap: 2,
-      });
-      cursorY += noteHeight + SECTION_GAP;
-    }
-
     const footerY = Math.max(cursorY + FOOTER_MIN_GAP, PAGE_HEIGHT - MARGIN_BOTTOM - FOOTER_HEIGHT);
     if (footerY + FOOTER_HEIGHT > PAGE_HEIGHT - MARGIN_BOTTOM) {
       addNewPageWithBackground(doc);
@@ -820,82 +783,89 @@ export async function renderExternalMaintenanceInvoicePdfBuffer(
   return {
     buffer,
     fileName,
-    invoiceReference,
+    invoiceNumber,
     publicPath,
   };
 }
 
-export async function storeExternalMaintenanceInvoicePdf(
+async function uploadGarageInvoicePdfToBlob(buffer: Buffer, pathname: string) {
+  return put(pathname, buffer, {
+    access: "public",
+    addRandomSuffix: false,
+    contentType: "application/pdf",
+    cacheControlMaxAge: 0,
+  });
+}
+
+export async function storeGarageRequestInvoicePdf(
   requestOriginFallback: string | null,
-  renderedInvoice: RenderedExternalMaintenanceInvoicePdf
+  renderedInvoice: RenderedGarageInvoicePdf
 ) {
   const isProduction = process.env.NODE_ENV === "production";
 
   if (hasVercelBlobCredentials()) {
     try {
-      const blob = await uploadPublicFeesPdfToBlob(
+      const blob = await uploadGarageInvoicePdfToBlob(
         renderedInvoice.buffer,
-        `external-maintenance/fees/${renderedInvoice.fileName}`
+        `garage-requests/invoices/${renderedInvoice.fileName}`
       );
 
       return {
         storage: "blob" as const,
         fileName: renderedInvoice.fileName,
-        invoiceReference: renderedInvoice.invoiceReference,
+        invoiceNumber: renderedInvoice.invoiceNumber,
         publicPath: renderedInvoice.publicPath,
         absoluteUrl: blob.url,
       };
     } catch (error) {
       console.warn(
-        "Vercel Blob upload failed for an external maintenance PDF.",
+        "Vercel Blob upload failed for a garage request invoice PDF.",
         error instanceof Error
           ? { name: error.name, message: error.message }
           : { message: "Unknown Blob upload error." }
       );
 
       if (isProduction) {
-        throw new ExternalMaintenancePdfStorageError(
-          "Unable to store the fees PDF in Vercel Blob. Verify that the linked Blob store is public and writable."
+        throw new GarageRequestPdfStorageError(
+          "Unable to store the invoice PDF in Vercel Blob. Verify that the linked Blob store is public and writable."
         );
       }
     }
   }
 
   if (isProduction) {
-    throw new ExternalMaintenancePdfStorageError(
+    throw new GarageRequestPdfStorageError(
       "Vercel Blob credentials are missing for production PDF storage. Configure BLOB_READ_WRITE_TOKEN or link a Blob store with OIDC."
     );
   }
 
-  await fs.mkdir(GENERATED_FEES_DIR, { recursive: true });
-  const filePath = path.join(GENERATED_FEES_DIR, renderedInvoice.fileName);
+  await fs.mkdir(GENERATED_GARAGE_INVOICES_DIR, { recursive: true });
+  const filePath = path.join(GENERATED_GARAGE_INVOICES_DIR, renderedInvoice.fileName);
   await fs.writeFile(filePath, renderedInvoice.buffer);
 
   return {
     storage: "local" as const,
     fileName: renderedInvoice.fileName,
     filePath,
-    invoiceReference: renderedInvoice.invoiceReference,
+    invoiceNumber: renderedInvoice.invoiceNumber,
     publicPath: renderedInvoice.publicPath,
     absoluteUrl: `${resolveSlAutomotivePublicBaseUrl(requestOriginFallback)}${renderedInvoice.publicPath}`,
   };
 }
 
-export async function generateExternalMaintenanceInvoicePdf(
+export async function generateGarageRequestInvoicePdf(
   requestOriginFallback: string | null,
-  request: ExternalMaintenanceInvoiceRequestData,
-  invoiceAmount: number,
-  statusComment?: string | null,
-  lines?: ExternalMaintenanceInvoiceLine[]
+  request: GarageInvoiceRequestData,
+  lines: GarageInvoiceLine[],
+  invoiceNumber: string
 ) {
-  const renderedInvoice = await renderExternalMaintenanceInvoicePdfBuffer(
+  const renderedInvoice = await renderGarageRequestInvoicePdfBuffer(
     request,
-    invoiceAmount,
-    statusComment,
-    lines
+    lines,
+    invoiceNumber
   );
 
-  const storedInvoice = await storeExternalMaintenanceInvoicePdf(
+  const storedInvoice = await storeGarageRequestInvoicePdf(
     requestOriginFallback,
     renderedInvoice
   );
@@ -904,5 +874,3 @@ export async function generateExternalMaintenanceInvoicePdf(
     ...storedInvoice,
   };
 }
-
-export const generateExternalMaintenanceFeesPdf = generateExternalMaintenanceInvoicePdf;

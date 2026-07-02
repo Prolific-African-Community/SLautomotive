@@ -30,6 +30,11 @@ type GarageRequest = {
   quoteTotal?: number | null;
   quoteNote?: string | null;
   mechanicNotes?: string | null;
+  invoiceNumber?: string | null;
+  invoiceTotal?: number | null;
+  invoiceCurrency?: string | null;
+  invoicePdfUrl?: string | null;
+  invoicePdfGeneratedAt?: string | null;
   createdAt: string;
   interventions: GarageInterventionLine[];
 };
@@ -169,6 +174,14 @@ function formatMoney(value?: number | null) {
   }).format(value);
 }
 
+function formatDate(value?: string | null) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("fr-LU", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
 function statusLabel(status: string) {
   const map: Record<string, string> = {
     NEW: "Nouveau",
@@ -263,6 +276,7 @@ export default function GarageRequestDetail() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [lineBusyId, setLineBusyId] = useState<string | null>(null);
+  const [invoiceBusy, setInvoiceBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -528,6 +542,52 @@ export default function GarageRequestDetail() {
     }
   }
 
+  async function generateInvoice() {
+    if (!request) return;
+
+    if (request.interventions.length === 0) {
+      setError(
+        "Ajoutez au moins une ligne d’intervention avant de générer la facture."
+      );
+      return;
+    }
+
+    try {
+      setInvoiceBusy(true);
+      setError(null);
+      setMessage(null);
+
+      const json = await fetchJson<{
+        request: GarageRequest;
+        invoiceNumber: string;
+        invoicePdfUrl: string;
+        invoicePdfGeneratedAt: string;
+        invoiceTotal: number;
+      }>(`/api/garage/requests/${id}/invoice`, {
+        method: "POST",
+      });
+
+      const invoice = json.data;
+      if (invoice?.request) {
+        setRequest(invoice.request);
+        hydrateForm(invoice.request);
+      }
+      setMessage(
+        invoice?.invoiceNumber
+          ? `Facture ${invoice.invoiceNumber} générée.`
+          : "Facture générée."
+      );
+
+      if (invoice?.invoicePdfUrl) {
+        window.open(invoice.invoicePdfUrl, "_blank", "noopener,noreferrer");
+      }
+    } catch (err: any) {
+      setError(err?.message || "Génération de la facture impossible.");
+    } finally {
+      setInvoiceBusy(false);
+    }
+  }
+
   useEffect(() => {
     if (!id) return;
 
@@ -643,10 +703,44 @@ export default function GarageRequestDetail() {
             >
               Envoyer devis WhatsApp
             </button>
+            <button
+              className={buttonClass}
+              onClick={generateInvoice}
+              disabled={invoiceBusy || request.interventions.length === 0}
+              title={
+                request.interventions.length === 0
+                  ? "Ajoutez au moins une ligne d’intervention avant de générer la facture."
+                  : undefined
+              }
+            >
+              {invoiceBusy
+                ? "Génération..."
+                : request.invoicePdfUrl
+                ? "Regénérer facture PDF"
+                : "Générer facture PDF"}
+            </button>
+            {request.invoicePdfUrl ? (
+              <a
+                className={ghostButtonClass}
+                href={request.invoicePdfUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Ouvrir facture
+              </a>
+            ) : null}
             <button className={ghostButtonClass} onClick={loadRequest} disabled={loading}>
               Rafraîchir
             </button>
           </div>
+          {request.invoiceNumber || request.invoicePdfUrl ? (
+            <p className="mt-3 text-xs text-zinc-500">
+              Facture {request.invoiceNumber || "générée"}
+              {request.invoicePdfGeneratedAt
+                ? ` · ${formatDate(request.invoicePdfGeneratedAt)}`
+                : ""}
+            </p>
+          ) : null}
         </header>
 
         {(error || message) && (

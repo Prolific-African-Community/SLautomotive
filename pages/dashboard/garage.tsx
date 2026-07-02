@@ -34,6 +34,11 @@ type GarageRequest = {
   priority: string;
   quoteTotal?: number | null;
   archivedAt?: string | null;
+  invoiceNumber?: string | null;
+  invoiceTotal?: number | null;
+  invoiceCurrency?: string | null;
+  invoicePdfUrl?: string | null;
+  invoicePdfGeneratedAt?: string | null;
   createdAt: string;
   interventions: GarageInterventionLine[];
   summary?: {
@@ -294,6 +299,7 @@ export default function GarageDashboard() {
   const [externalActionId, setExternalActionId] = useState<string | null>(null);
   const [quoteDrafts, setQuoteDrafts] = useState<Record<string, QuoteDraft>>({});
   const [selectedGarageRequestId, setSelectedGarageRequestId] = useState<string | null>(null);
+  const [invoiceGeneratingId, setInvoiceGeneratingId] = useState<string | null>(null);
   const [selectedExternalRequestId, setSelectedExternalRequestId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showCodeForm, setShowCodeForm] = useState(false);
@@ -552,6 +558,49 @@ export default function GarageDashboard() {
       }
     } catch (err: any) {
       setError(err?.message || "Archivage impossible.");
+    }
+  }
+
+  async function generateGarageInvoice(request: GarageRequest) {
+    const lineCount =
+      request.summary?.interventionCount ?? request.interventions.length;
+
+    if (lineCount === 0) {
+      setError(
+        "Ajoutez au moins une ligne d’intervention avant de générer la facture."
+      );
+      return;
+    }
+
+    try {
+      setInvoiceGeneratingId(request.id);
+      setError(null);
+      setMessage(null);
+
+      const json = await fetchJson<{
+        invoiceNumber: string;
+        invoicePdfUrl: string;
+        invoicePdfGeneratedAt: string;
+        invoiceTotal: number;
+      }>(`/api/garage/requests/${request.id}/invoice`, {
+        method: "POST",
+      });
+
+      const invoice = json.data;
+      setMessage(
+        invoice?.invoiceNumber
+          ? `Facture ${invoice.invoiceNumber} générée.`
+          : "Facture générée."
+      );
+      await loadRequests();
+
+      if (typeof window !== "undefined" && invoice?.invoicePdfUrl) {
+        window.open(invoice.invoicePdfUrl, "_blank", "noopener,noreferrer");
+      }
+    } catch (err: any) {
+      setError(err?.message || "Génération de la facture impossible.");
+    } finally {
+      setInvoiceGeneratingId(null);
     }
   }
 
@@ -1305,6 +1354,70 @@ export default function GarageDashboard() {
                       <p className="mt-3 text-sm text-zinc-400">Aucune ligne d&apos;intervention pour l&apos;instant.</p>
                     )}
                   </div>
+
+                  {(() => {
+                    const invoiceBusy = invoiceGeneratingId === selectedGarageRequest.id;
+                    const hasInvoice = Boolean(selectedGarageRequest.invoicePdfUrl);
+                    const canGenerate = lineCount > 0;
+
+                    return (
+                      <div className="mt-4 rounded-2xl border border-yellow-300/20 bg-yellow-300/[0.04] p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="text-xs font-bold uppercase tracking-[0.14em] text-yellow-200/80">
+                              Facture PDF
+                            </p>
+                            {hasInvoice ? (
+                              <p className="mt-2 text-sm text-zinc-300">
+                                {selectedGarageRequest.invoiceNumber || "Facture générée"}
+                                {selectedGarageRequest.invoicePdfGeneratedAt
+                                  ? ` · ${formatDate(selectedGarageRequest.invoicePdfGeneratedAt)}`
+                                  : ""}
+                              </p>
+                            ) : (
+                              <p className="mt-2 text-sm text-zinc-400">
+                                {canGenerate
+                                  ? "Générez la facture à partir des lignes d’intervention."
+                                  : "Ajoutez au moins une ligne d’intervention avant de générer la facture."}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            {hasInvoice ? (
+                              <>
+                                <a
+                                  className={buttonClass}
+                                  href={selectedGarageRequest.invoicePdfUrl || "#"}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  Ouvrir facture
+                                </a>
+                                <button
+                                  type="button"
+                                  className={ghostButtonClass}
+                                  onClick={() => void generateGarageInvoice(selectedGarageRequest)}
+                                  disabled={invoiceBusy || !canGenerate}
+                                >
+                                  {invoiceBusy ? "Génération..." : "Regénérer"}
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                className={buttonClass}
+                                onClick={() => void generateGarageInvoice(selectedGarageRequest)}
+                                disabled={invoiceBusy || !canGenerate}
+                              >
+                                {invoiceBusy ? "Génération..." : "Générer facture PDF"}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   <div className="mt-6 flex flex-wrap gap-3 border-t border-white/10 pt-5">
                     {selectedGarageRequest.status === "NEW" ? (

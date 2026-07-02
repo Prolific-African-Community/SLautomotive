@@ -130,6 +130,12 @@ model GarageRequest {
   mechanicNotes String?
   archivedAt    DateTime?
 
+  invoiceNumber         String?
+  invoiceTotal          Float?
+  invoiceCurrency       String?   @default("EUR")
+  invoicePdfUrl         String?
+  invoicePdfGeneratedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
