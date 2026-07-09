@@ -12,3 +12,19 @@ export const SL_AUTOMOTIVE_ISSUER_TEXT =
 
 export const SL_AUTOMOTIVE_PAYMENT_TEXT =
   "Paiement à l’ordre de Stanley Arthur Lishou\nIBAN: FR802043302626N261441545654\nBIC: NTSBFRM1XXX";
+
+export const NOVOTRALUX_BILLING_PROFILE = {
+  name: "NOVOTRALUX S.À R.L.",
+  addressLines: [
+    "21 Stawelerstrooss, 9964",
+    "Huldang Ëlwen,",
+    "Luxembourg",
+  ],
+  vatNumber: "LU31249718",
+};
+
+export const NOVOTRALUX_BILLING_TEXT = [
+  NOVOTRALUX_BILLING_PROFILE.name,
+  ...NOVOTRALUX_BILLING_PROFILE.addressLines,
+  `TVA : ${NOVOTRALUX_BILLING_PROFILE.vatNumber}`,
+].join("\n");

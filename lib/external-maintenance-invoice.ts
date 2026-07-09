@@ -9,9 +9,11 @@ import {
   externalMaintenanceVehicleTypeLabel,
 } from "./external-maintenance-ui";
 import {
+  NOVOTRALUX_BILLING_TEXT,
   SL_AUTOMOTIVE_ISSUER_TEXT,
   SL_AUTOMOTIVE_PAYMENT_TEXT,
 } from "./sl-invoice-config";
+import { buildExternalInvoiceNumber } from "./sl-invoice-reference";
 
 const GENERATED_FEES_DIR = path.join(process.cwd(), "public", "generated", "fees");
 
@@ -216,9 +218,7 @@ function buildInvoiceLines(lines: ExternalMaintenanceInvoiceLine[] | undefined, 
 }
 
 function buildInvoiceReference(request: ExternalMaintenanceInvoiceRequestData) {
-  const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  const shortId = request.id.slice(-6).toUpperCase();
-  return `SLA-FEES-${datePart}-${shortId}`;
+  return buildExternalInvoiceNumber(request);
 }
 
 function applyPageBackground(doc: InstanceType<typeof PDFDocument>) {
@@ -670,7 +670,7 @@ export async function renderExternalMaintenanceInvoicePdfBuffer(
     cursorY += SECTION_GAP;
 
     const issuerText = SL_AUTOMOTIVE_ISSUER_TEXT;
-    const clientText = "NOVOTRALUX S.À R.L.\n21 Stawelerstrooss, 9964\nHuldang Ëlwen,\nLuxembourg";
+    const clientText = NOVOTRALUX_BILLING_TEXT;
     const issuerHeight = BOX_PADDING * 2 + 18 + measureWrappedTextHeight(doc, issuerText, issuerWidth - BOX_PADDING * 2, {
       font: "Helvetica",
       fontSize: BODY_FONT_SIZE,

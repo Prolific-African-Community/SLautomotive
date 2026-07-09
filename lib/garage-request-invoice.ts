@@ -9,9 +9,11 @@ import {
   resolveSlAutomotivePublicBaseUrl,
 } from "./external-maintenance-invoice";
 import {
+  NOVOTRALUX_BILLING_TEXT,
   SL_AUTOMOTIVE_ISSUER_TEXT,
   SL_AUTOMOTIVE_PAYMENT_TEXT,
 } from "./sl-invoice-config";
+import { buildGarageInvoiceNumber as buildStableGarageInvoiceNumber } from "./sl-invoice-reference";
 
 const GENERATED_GARAGE_INVOICES_DIR = path.join(
   process.cwd(),
@@ -199,17 +201,15 @@ function calculateTotals(lines: GarageInvoiceLine[]): Totals {
 }
 
 /**
- * Deterministic, stable invoice number for a given garage request. Calling it
- * again for the same request/year yields the same reference, so regenerating a
- * PDF never mints a new number.
+ * Deterministic, stable invoice number for a given garage request. Legacy
+ * values such as SL-GAR-2026-ABC123 are normalized to GAR-ABC123, so
+ * regenerating a PDF never keeps the old long format.
  */
 export function buildGarageInvoiceNumber(
-  request: Pick<GarageInvoiceRequestData, "id">,
-  referenceDate: Date = new Date()
+  request: Pick<GarageInvoiceRequestData, "id" | "invoiceNumber">,
+  _referenceDate: Date = new Date()
 ) {
-  const year = referenceDate.getFullYear();
-  const shortId = request.id.slice(-6).toUpperCase();
-  return `SL-GAR-${year}-${shortId}`;
+  return buildStableGarageInvoiceNumber(request);
 }
 
 function applyPageBackground(doc: InstanceType<typeof PDFDocument>) {
@@ -533,6 +533,10 @@ function drawFooter(doc: InstanceType<typeof PDFDocument>, y: number) {
 }
 
 function buildClientText(request: GarageInvoiceRequestData) {
+  if (isNovoTraluxGarageClient(request)) {
+    return NOVOTRALUX_BILLING_TEXT;
+  }
+
   const name =
     [request.firstName, request.lastName].filter((part) => part?.trim()).join(" ").trim() ||
     "Client non renseigné";
@@ -542,6 +546,21 @@ function buildClientText(request: GarageInvoiceRequestData) {
   if (request.email?.trim()) lines.push(sanitizeSingleLine(request.email));
 
   return lines.join("\n");
+}
+
+function isNovoTraluxGarageClient(request: GarageInvoiceRequestData) {
+  const normalizedIdentity = [
+    request.firstName,
+    request.lastName,
+    request.email,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "");
+
+  return normalizedIdentity.includes("novotralux");
 }
 
 function buildVehicleLabel(request: GarageInvoiceRequestData) {

@@ -135,9 +135,9 @@ export default async function handler(
         });
       }
 
-      // Keep an already-assigned invoice number stable across regenerations.
-      const invoiceNumber =
-        request.invoiceNumber ?? buildGarageInvoiceNumber(request, request.createdAt);
+      // Keep an already-assigned invoice number stable across regenerations,
+      // while normalizing legacy SL-GAR-YYYY-XXXXXX values to GAR-XXXXXX.
+      const invoiceNumber = buildGarageInvoiceNumber(request, request.createdAt);
 
       const generatedInvoice = await generateGarageRequestInvoicePdf(
         getRequestOriginFallback(req),
