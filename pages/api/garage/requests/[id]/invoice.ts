@@ -7,6 +7,7 @@ import {
   buildGarageInvoiceNumber,
   generateGarageRequestInvoicePdf,
 } from "../../../../../lib/garage-request-invoice";
+import { calculateInvoiceTaxTotals } from "../../../../../lib/sl-invoice-config";
 
 const NO_LINES_MESSAGE =
   "Ajoutez au moins une ligne d’intervention avant de générer la facture.";
@@ -124,9 +125,10 @@ export default async function handler(
         });
       }
 
-      const total = roundMoney(
+      const subtotalHt = roundMoney(
         request.interventions.reduce((sum, line) => sum + (line.total || 0), 0)
       );
+      const total = calculateInvoiceTaxTotals(subtotalHt).totalPayable;
 
       if (!(total > 0)) {
         return res.status(409).json({
@@ -136,7 +138,7 @@ export default async function handler(
       }
 
       // Keep an already-assigned invoice number stable across regenerations,
-      // while normalizing legacy SL-GAR-YYYY-XXXXXX values to GAR-XXXXXX.
+      // while normalizing legacy values to GAR-XXXXXX.
       const invoiceNumber = buildGarageInvoiceNumber(request, request.createdAt);
 
       const generatedInvoice = await generateGarageRequestInvoicePdf(

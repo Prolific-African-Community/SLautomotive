@@ -10,8 +10,14 @@ import {
 } from "./external-maintenance-invoice";
 import {
   NOVOTRALUX_BILLING_TEXT,
-  SL_AUTOMOTIVE_ISSUER_TEXT,
+  NOVOTRALUX_BILLING_PROFILE,
+  SL_INVOICE_TAX_PROFILE,
   SL_AUTOMOTIVE_PAYMENT_TEXT,
+  buildSlAutomotiveIssuerText,
+  calculateInvoiceTaxTotals,
+  formatInvoiceCurrency,
+  isNovoTraluxCustomer,
+  warnMissingSlIntraCommunityVatForEuCompany,
 } from "./sl-invoice-config";
 import { buildGarageInvoiceNumber as buildStableGarageInvoiceNumber } from "./sl-invoice-reference";
 
@@ -60,10 +66,9 @@ type TableColumn = {
 };
 
 type Totals = {
-  subtotal: number;
-  vatRate: number | null;
-  vatAmount: number | null;
-  total: number;
+  subtotalHt: number;
+  vatAmount: number;
+  totalPayable: number;
 };
 
 type KeyValueRow = {
@@ -90,7 +95,7 @@ const TABLE_WIDTH =
   TABLE_DESCRIPTION_WIDTH + TABLE_QTY_WIDTH + TABLE_UNIT_PRICE_WIDTH + TABLE_TOTAL_WIDTH;
 const TABLE_HEADER_HEIGHT = 28;
 const TABLE_NUMERIC_MIN_HEIGHT = 36;
-const FOOTER_HEIGHT = 118;
+const FOOTER_HEIGHT = 136;
 const FOOTER_MIN_GAP = 20;
 const TITLE_FONT_SIZE = 28;
 const BODY_FONT_SIZE = 10;
@@ -127,12 +132,7 @@ function formatShortDate(date: Date) {
 }
 
 function formatMoney(amount: number) {
-  return new Intl.NumberFormat("fr-LU", {
-    style: "currency",
-    currency: "EUR",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
+  return formatInvoiceCurrency(amount);
 }
 
 function slugify(value: string) {
@@ -167,43 +167,14 @@ function getResolvedLogoPath() {
   return LOGO_CANDIDATES.find((candidate) => fsSync.existsSync(candidate)) ?? null;
 }
 
-function parseOptionalVatRate() {
-  const rawRate = process.env.SL_PDF_VAT_RATE?.trim();
-
-  if (!rawRate) return null;
-
-  const normalized = rawRate.replace(",", ".");
-  const parsed = Number(normalized);
-
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    return null;
-  }
-
-  return parsed > 1 ? parsed / 100 : parsed;
-}
-
-function roundMoney(value: number) {
-  return Math.round(value * 100) / 100;
-}
-
 function calculateTotals(lines: GarageInvoiceLine[]): Totals {
-  const vatRate = parseOptionalVatRate();
-  const subtotal = roundMoney(lines.reduce((sum, line) => sum + line.total, 0));
-  const vatAmount = vatRate !== null ? roundMoney(subtotal * vatRate) : null;
-  const total = vatAmount !== null ? roundMoney(subtotal + vatAmount) : subtotal;
-
-  return {
-    subtotal,
-    vatRate,
-    vatAmount,
-    total,
-  };
+  return calculateInvoiceTaxTotals(lines.reduce((sum, line) => sum + line.total, 0));
 }
 
 /**
  * Deterministic, stable invoice number for a given garage request. Legacy
- * values such as SL-GAR-2026-ABC123 are normalized to GAR-ABC123, so
- * regenerating a PDF never keeps the old long format.
+ * values are normalized to the short GAR-XXXXXX format, so regenerating a PDF
+ * never keeps the old long format.
  */
 export function buildGarageInvoiceNumber(
   request: Pick<GarageInvoiceRequestData, "id" | "invoiceNumber">,
@@ -524,7 +495,15 @@ function drawFooter(doc: InstanceType<typeof PDFDocument>, y: number) {
     fillColor: TEXT_COLOR,
   });
 
-  drawWrappedText(doc, "MERCI DE VOTRE CONFIANCE", MARGIN_X, y + 82, CONTENT_WIDTH, {
+  drawSectionTitle(doc, "Mention TVA", MARGIN_X, y + 74);
+  drawWrappedText(doc, SL_INVOICE_TAX_PROFILE.legalMention, MARGIN_X, y + 90, CONTENT_WIDTH, {
+    font: "Helvetica",
+    fontSize: SMALL_FONT_SIZE + 0.5,
+    fillColor: TEXT_COLOR,
+    lineGap: 2,
+  });
+
+  drawWrappedText(doc, "MERCI DE VOTRE CONFIANCE", MARGIN_X, y + 116, CONTENT_WIDTH, {
     font: "Helvetica-Bold",
     fontSize: BODY_FONT_SIZE,
     fillColor: MUTED_TEXT_COLOR,
@@ -544,6 +523,9 @@ function buildClientText(request: GarageInvoiceRequestData) {
 
   if (request.phone?.trim()) lines.push(sanitizeSingleLine(request.phone));
   if (request.email?.trim()) lines.push(sanitizeSingleLine(request.email));
+  if (isNovoTraluxCustomer(name)) {
+    lines.push(`TVA client : ${NOVOTRALUX_BILLING_PROFILE.vatNumber}`);
+  }
 
   return lines.join("\n");
 }
@@ -592,6 +574,10 @@ export async function renderGarageRequestInvoicePdfBuffer(
   const invoiceDate = new Date();
   const logoPath = getResolvedLogoPath();
   const totals = calculateTotals(lines);
+  const customerName =
+    [request.firstName, request.lastName].filter((part) => part?.trim()).join(" ").trim() ||
+    "Client non renseigné";
+  warnMissingSlIntraCommunityVatForEuCompany(customerName);
 
   const buffer = await new Promise<Buffer>((resolve, reject) => {
     const doc = new PDFDocument({
@@ -661,7 +647,7 @@ export async function renderGarageRequestInvoicePdfBuffer(
 
     cursorY += SECTION_GAP;
 
-    const issuerText = SL_AUTOMOTIVE_ISSUER_TEXT;
+    const issuerText = buildSlAutomotiveIssuerText();
     const clientText = buildClientText(request);
     const issuerHeight =
       BOX_PADDING * 2 +
@@ -751,17 +737,20 @@ export async function renderGarageRequestInvoicePdfBuffer(
     cursorY += SECTION_GAP;
 
     const totalsRows = [
-      { label: "Sous-total", value: formatMoney(totals.subtotal), total: false },
-      ...(totals.vatAmount !== null
-        ? [
-            {
-              label: `TVA${totals.vatRate !== null ? ` (${(totals.vatRate * 100).toFixed(0)}%)` : ""}`,
-              value: formatMoney(totals.vatAmount),
-              total: false,
-            },
-          ]
-        : []),
-      { label: "Total", value: formatMoney(totals.total), total: true },
+      { label: "Total HT", value: formatMoney(totals.subtotalHt), total: false },
+      {
+        label: "TVA",
+        value:
+          SL_INVOICE_TAX_PROFILE.mode === "FR_VAT_FRANCHISE"
+            ? "Non applicable"
+            : formatMoney(totals.vatAmount),
+        total: false,
+      },
+      {
+        label: SL_INVOICE_TAX_PROFILE.totalLabel,
+        value: formatMoney(totals.totalPayable),
+        total: true,
+      },
     ];
     const totalsHeight = totalsRows.reduce((sum, row) => sum + (row.total ? 28 : 22), 28);
     if (!ensurePageSpace(cursorY, totalsHeight)) {
@@ -769,16 +758,17 @@ export async function renderGarageRequestInvoicePdfBuffer(
       cursorY = MARGIN_TOP;
     }
 
-    const totalsX = MARGIN_X + CONTENT_WIDTH - 192;
-    drawRoundedBox(doc, totalsX, cursorY, 192, totalsHeight);
+    const totalsWidth = 236;
+    const totalsX = MARGIN_X + CONTENT_WIDTH - totalsWidth;
+    drawRoundedBox(doc, totalsX, cursorY, totalsWidth, totalsHeight);
     let totalsY = cursorY + 16;
     totalsRows.forEach((row) => {
-      drawWrappedText(doc, row.label, totalsX + 16, totalsY, 78, {
+      drawWrappedText(doc, row.label, totalsX + 16, totalsY, 116, {
         font: row.total ? "Helvetica-Bold" : "Helvetica",
         fontSize: row.total ? 10.5 : SMALL_FONT_SIZE + 0.5,
         fillColor: row.total ? TEXT_COLOR : MUTED_TEXT_COLOR,
       });
-      drawWrappedText(doc, row.value, totalsX + 90, totalsY, 86, {
+      drawWrappedText(doc, row.value, totalsX + 136, totalsY, 84, {
         font: "Helvetica-Bold",
         fontSize: row.total ? 12 : BODY_FONT_SIZE,
         fillColor: row.total ? TOTAL_COLOR : TEXT_COLOR,
