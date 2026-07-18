@@ -15,6 +15,8 @@ type GarageRequest = {
   lastName?: string | null;
   email?: string | null;
   phone?: string | null;
+  clientVatNumber?: string | null;
+  clientBillingAddress?: string | null;
   vehicleBrand?: string | null;
   vehicleModel?: string | null;
   vehicleYear?: number | null;
@@ -65,6 +67,8 @@ type RequestForm = {
   lastName: string;
   email: string;
   phone: string;
+  clientVatNumber: string;
+  clientBillingAddress: string;
   vehicleBrand: string;
   vehicleModel: string;
   vehicleYear: string;
@@ -119,6 +123,8 @@ const EMPTY_FORM: RequestForm = {
   lastName: "",
   email: "",
   phone: "",
+  clientVatNumber: "",
+  clientBillingAddress: "",
   vehicleBrand: "",
   vehicleModel: "",
   vehicleYear: "",
@@ -304,6 +310,8 @@ export default function GarageRequestDetail() {
       lastName: toInputValue(data.lastName),
       email: toInputValue(data.email),
       phone: toInputValue(data.phone),
+      clientVatNumber: toInputValue(data.clientVatNumber),
+      clientBillingAddress: toInputValue(data.clientBillingAddress),
       vehicleBrand: toInputValue(data.vehicleBrand),
       vehicleModel: toInputValue(data.vehicleModel),
       vehicleYear: toInputValue(data.vehicleYear),
@@ -765,6 +773,8 @@ export default function GarageRequestDetail() {
               <input className={inputClass} value={form.email} onChange={(e) => updateForm("email", e.target.value)} placeholder="Email" />
               <input className={inputClass} value={form.preferredContactMethod} onChange={(e) => updateForm("preferredContactMethod", e.target.value)} placeholder="Méthode contact préférée" />
               <input className={inputClass} value={form.preferredDate} onChange={(e) => updateForm("preferredDate", e.target.value)} type="date" />
+              <input className={inputClass} value={form.clientVatNumber} onChange={(e) => updateForm("clientVatNumber", e.target.value)} placeholder="TVA client" />
+              <textarea className={`${inputClass} min-h-[100px] sm:col-span-2`} value={form.clientBillingAddress} onChange={(e) => updateForm("clientBillingAddress", e.target.value)} placeholder="Adresse de facturation" />
             </div>
           </section>
 

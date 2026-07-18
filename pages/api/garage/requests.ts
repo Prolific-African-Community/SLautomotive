@@ -33,6 +33,8 @@ function normalizeCreateData(body: any) {
     lastName: parseString(body.lastName) ?? null,
     email: parseString(body.email) ?? null,
     phone: parseString(body.phone) ?? null,
+    clientVatNumber: parseString(body.clientVatNumber) ?? null,
+    clientBillingAddress: parseString(body.clientBillingAddress) ?? null,
     vehicleBrand: parseString(body.vehicleBrand) ?? null,
     vehicleModel: parseString(body.vehicleModel) ?? null,
     vehicleYear: vehicleYear ?? null,

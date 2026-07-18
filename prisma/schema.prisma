@@ -102,10 +102,12 @@ model VehicleAnalysis {
 model GarageRequest {
   id String @id @default(cuid())
 
-  firstName String?
-  lastName  String?
-  email     String?
-  phone     String?
+  firstName            String?
+  lastName             String?
+  email                String?
+  phone                String?
+  clientVatNumber      String?
+  clientBillingAddress String?
 
   vehicleBrand String?
   vehicleModel String?

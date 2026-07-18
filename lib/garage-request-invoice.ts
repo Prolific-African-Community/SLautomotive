@@ -9,7 +9,6 @@ import {
   resolveSlAutomotivePublicBaseUrl,
 } from "./external-maintenance-invoice";
 import {
-  NOVOTRALUX_BILLING_TEXT,
   NOVOTRALUX_BILLING_PROFILE,
   SL_INVOICE_TAX_PROFILE,
   SL_AUTOMOTIVE_PAYMENT_TEXT,
@@ -35,6 +34,8 @@ export type GarageInvoiceRequestData = Pick<
   | "lastName"
   | "email"
   | "phone"
+  | "clientVatNumber"
+  | "clientBillingAddress"
   | "vehicleBrand"
   | "vehicleModel"
   | "vehicleYear"
@@ -512,20 +513,28 @@ function drawFooter(doc: InstanceType<typeof PDFDocument>, y: number) {
 }
 
 function buildClientText(request: GarageInvoiceRequestData) {
-  if (isNovoTraluxGarageClient(request)) {
-    return NOVOTRALUX_BILLING_TEXT;
-  }
-
   const name =
     [request.firstName, request.lastName].filter((part) => part?.trim()).join(" ").trim() ||
     "Client non renseigné";
   const lines = [name.toUpperCase()];
 
+  const useNovoTraluxFallback = isNovoTraluxGarageClient(request);
+  const billingAddress = request.clientBillingAddress?.trim()
+    ? safeMultilineText(request.clientBillingAddress)
+    : useNovoTraluxFallback
+    ? NOVOTRALUX_BILLING_PROFILE.addressLines.join("\n")
+    : null;
+  const vatNumber = request.clientVatNumber?.trim()
+    ? sanitizeSingleLine(request.clientVatNumber)
+    : useNovoTraluxFallback
+    ? NOVOTRALUX_BILLING_PROFILE.vatNumber
+    : null;
+
+  if (billingAddress) lines.push(billingAddress);
+  if (vatNumber) lines.push(`TVA client : ${vatNumber}`);
+
   if (request.phone?.trim()) lines.push(sanitizeSingleLine(request.phone));
   if (request.email?.trim()) lines.push(sanitizeSingleLine(request.email));
-  if (isNovoTraluxCustomer(name)) {
-    lines.push(`TVA client : ${NOVOTRALUX_BILLING_PROFILE.vatNumber}`);
-  }
 
   return lines.join("\n");
 }
@@ -542,7 +551,7 @@ function isNovoTraluxGarageClient(request: GarageInvoiceRequestData) {
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "");
 
-  return normalizedIdentity.includes("novotralux");
+  return normalizedIdentity.includes("novotralux") || isNovoTraluxCustomer(normalizedIdentity);
 }
 
 function buildVehicleLabel(request: GarageInvoiceRequestData) {

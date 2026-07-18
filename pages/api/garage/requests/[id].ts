@@ -19,6 +19,8 @@ function buildPatchData(body: any) {
     "lastName",
     "email",
     "phone",
+    "clientVatNumber",
+    "clientBillingAddress",
     "vehicleBrand",
     "vehicleModel",
     "plateNumber",

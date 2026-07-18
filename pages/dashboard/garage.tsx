@@ -22,6 +22,8 @@ type GarageRequest = {
   lastName?: string | null;
   email?: string | null;
   phone?: string | null;
+  clientVatNumber?: string | null;
+  clientBillingAddress?: string | null;
   vehicleBrand?: string | null;
   vehicleModel?: string | null;
   vehicleYear?: number | null;
@@ -126,6 +128,8 @@ type RequestForm = {
   lastName: string;
   phone: string;
   email: string;
+  clientVatNumber: string;
+  clientBillingAddress: string;
   vehicleBrand: string;
   vehicleModel: string;
   vehicleYear: string;
@@ -197,6 +201,8 @@ const EMPTY_FORM: RequestForm = {
   lastName: "",
   phone: "",
   email: "",
+  clientVatNumber: "",
+  clientBillingAddress: "",
   vehicleBrand: "",
   vehicleModel: "",
   vehicleYear: "",
@@ -2362,6 +2368,18 @@ export default function GarageDashboard() {
                 value={form.email}
                 onChange={(e) => updateForm("email", e.target.value)}
                 placeholder="Email"
+              />
+              <input
+                className={lightInputClass}
+                value={form.clientVatNumber}
+                onChange={(e) => updateForm("clientVatNumber", e.target.value)}
+                placeholder="TVA client"
+              />
+              <textarea
+                className={`${lightInputClass} min-h-[100px] sm:col-span-2`}
+                value={form.clientBillingAddress}
+                onChange={(e) => updateForm("clientBillingAddress", e.target.value)}
+                placeholder="Adresse de facturation"
               />
               <input
                 className={lightInputClass}
