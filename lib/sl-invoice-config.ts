@@ -30,8 +30,8 @@ export const SL_AUTOMOTIVE_BILLING_PROFILE = {
 } as const;
 
 const NOVOTRALUX_ADDRESS_LINES = [
-  "21 Stawelerstrooss, 9964",
-  "Huldang Ëlwen,",
+  "21 Stawelerstrooss",
+  "9964, Huldange,",
   "Luxembourg",
 ] as const;
 
