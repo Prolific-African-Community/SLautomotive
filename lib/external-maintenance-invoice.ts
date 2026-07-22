@@ -181,7 +181,7 @@ function buildInvoiceLines(lines: ExternalMaintenanceInvoiceLine[] | undefined, 
   return [
     {
       code: null,
-      label: "Frais d'intervention",
+      label: "Facture",
       description: "Montant global d'intervention transmis pour la prise en charge.",
       qty: 1,
       unitPrice: amount,
@@ -605,7 +605,7 @@ export async function renderExternalMaintenanceInvoicePdfBuffer(
     const tableColumnWidths = TABLE_COLUMNS.map((column) => column.width);
     let cursorY = MARGIN_TOP;
 
-    const titleText = "FRAIS D’INTERVENTION";
+    const titleText = "FACTURE";
     const titleHeight = measureWrappedTextHeight(doc, titleText, 280, {
       font: "Helvetica-Bold",
       fontSize: TITLE_FONT_SIZE,
