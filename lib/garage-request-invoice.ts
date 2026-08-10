@@ -26,6 +26,14 @@ const GENERATED_GARAGE_INVOICES_DIR = path.join(
   "generated",
   "garage-invoices"
 );
+const GENERATED_GARAGE_QUOTES_DIR = path.join(
+  process.cwd(),
+  "public",
+  "generated",
+  "garage-quotes"
+);
+
+export type GarageRequestDocumentType = "INVOICE" | "QUOTE";
 
 export type GarageInvoiceRequestData = Pick<
   GarageRequest,
@@ -45,6 +53,7 @@ export type GarageInvoiceRequestData = Pick<
   | "symptoms"
   | "description"
   | "invoiceNumber"
+  | "quoteNumber"
 >;
 
 export type GarageInvoiceLine = Pick<
@@ -52,10 +61,11 @@ export type GarageInvoiceLine = Pick<
   "code" | "label" | "category" | "qty" | "unitPrice" | "total"
 >;
 
-type RenderedGarageInvoicePdf = {
+type RenderedGarageRequestPdf = {
   buffer: Buffer;
   fileName: string;
-  invoiceNumber: string;
+  documentNumber: string;
+  documentType: GarageRequestDocumentType;
   publicPath: string;
 };
 
@@ -182,6 +192,13 @@ export function buildGarageInvoiceNumber(
   _referenceDate: Date = new Date()
 ) {
   return buildStableGarageInvoiceNumber(request);
+}
+
+export function buildGarageQuoteNumber(
+  request: Pick<GarageInvoiceRequestData, "id" | "invoiceNumber" | "quoteNumber">
+) {
+  const existing = request.quoteNumber?.trim();
+  return existing || `DEV-${buildStableGarageInvoiceNumber(request)}`;
 }
 
 function applyPageBackground(doc: InstanceType<typeof PDFDocument>) {
@@ -570,16 +587,17 @@ export class GarageRequestPdfStorageError extends Error {
   }
 }
 
-export async function renderGarageRequestInvoicePdfBuffer(
+async function renderGarageRequestPdfBuffer(
   request: GarageInvoiceRequestData,
   lines: GarageInvoiceLine[],
-  invoiceNumber: string
-): Promise<RenderedGarageInvoicePdf> {
+  documentNumber: string,
+  documentType: GarageRequestDocumentType
+): Promise<RenderedGarageRequestPdf> {
   const version = Date.now();
-  const fileName = `${invoiceNumber}-v${version}-${slugify(
+  const fileName = `${documentNumber}-v${version}-${slugify(
     request.plateNumber || request.id
   )}.pdf`;
-  const publicPath = `/generated/garage-invoices/${fileName}`;
+  const publicPath = `/generated/${documentType === "QUOTE" ? "garage-quotes" : "garage-invoices"}/${fileName}`;
   const invoiceDate = new Date();
   const logoPath = getResolvedLogoPath();
   const totals = calculateTotals(lines);
@@ -610,7 +628,7 @@ export async function renderGarageRequestInvoicePdfBuffer(
     const tableColumnWidths = TABLE_COLUMNS.map((column) => column.width);
     let cursorY = MARGIN_TOP;
 
-    const titleText = "FACTURE";
+    const titleText = documentType === "QUOTE" ? "DEVIS" : "FACTURE";
     const titleHeight = measureWrappedTextHeight(doc, titleText, 280, {
       font: "Helvetica-Bold",
       fontSize: TITLE_FONT_SIZE,
@@ -625,7 +643,8 @@ export async function renderGarageRequestInvoicePdfBuffer(
     });
 
     const pillsY = cursorY + titleHeight + 18;
-    drawPill(doc, MARGIN_X, pillsY, 230, `Facture : ${invoiceNumber}`);
+    const referenceLabel = documentType === "QUOTE" ? "Devis" : "Facture";
+    drawPill(doc, MARGIN_X, pillsY, 230, `${referenceLabel} : ${documentNumber}`);
     drawPill(doc, MARGIN_X + 242, pillsY, 118, formatShortDate(invoiceDate));
 
     const logoBoxX = MARGIN_X + CONTENT_WIDTH - logoBoxWidth;
@@ -801,12 +820,29 @@ export async function renderGarageRequestInvoicePdfBuffer(
   return {
     buffer,
     fileName,
-    invoiceNumber,
+    documentNumber,
+    documentType,
     publicPath,
   };
 }
 
-async function uploadGarageInvoicePdfToBlob(buffer: Buffer, pathname: string) {
+export function renderGarageRequestInvoicePdfBuffer(
+  request: GarageInvoiceRequestData,
+  lines: GarageInvoiceLine[],
+  invoiceNumber: string
+) {
+  return renderGarageRequestPdfBuffer(request, lines, invoiceNumber, "INVOICE");
+}
+
+export function renderGarageRequestQuotePdfBuffer(
+  request: GarageInvoiceRequestData,
+  lines: GarageInvoiceLine[],
+  quoteNumber: string
+) {
+  return renderGarageRequestPdfBuffer(request, lines, quoteNumber, "QUOTE");
+}
+
+async function uploadGarageRequestPdfToBlob(buffer: Buffer, pathname: string) {
   return put(pathname, buffer, {
     access: "public",
     addRandomSuffix: false,
@@ -815,29 +851,31 @@ async function uploadGarageInvoicePdfToBlob(buffer: Buffer, pathname: string) {
   });
 }
 
-export async function storeGarageRequestInvoicePdf(
+async function storeGarageRequestPdf(
   requestOriginFallback: string | null,
-  renderedInvoice: RenderedGarageInvoicePdf
+  renderedDocument: RenderedGarageRequestPdf
 ) {
   const isProduction = process.env.NODE_ENV === "production";
+  const isQuote = renderedDocument.documentType === "QUOTE";
+  const documentLabel = isQuote ? "quote" : "invoice";
 
   if (hasVercelBlobCredentials()) {
     try {
-      const blob = await uploadGarageInvoicePdfToBlob(
-        renderedInvoice.buffer,
-        `garage-requests/invoices/${renderedInvoice.fileName}`
+      const blob = await uploadGarageRequestPdfToBlob(
+        renderedDocument.buffer,
+        `garage-requests/${isQuote ? "quotes" : "invoices"}/${renderedDocument.fileName}`
       );
 
       return {
         storage: "blob" as const,
-        fileName: renderedInvoice.fileName,
-        invoiceNumber: renderedInvoice.invoiceNumber,
-        publicPath: renderedInvoice.publicPath,
+        fileName: renderedDocument.fileName,
+        documentNumber: renderedDocument.documentNumber,
+        publicPath: renderedDocument.publicPath,
         absoluteUrl: blob.url,
       };
     } catch (error) {
       console.warn(
-        "Vercel Blob upload failed for a garage request invoice PDF.",
+        `Vercel Blob upload failed for a garage request ${documentLabel} PDF.`,
         error instanceof Error
           ? { name: error.name, message: error.message }
           : { message: "Unknown Blob upload error." }
@@ -845,7 +883,7 @@ export async function storeGarageRequestInvoicePdf(
 
       if (isProduction) {
         throw new GarageRequestPdfStorageError(
-          "Unable to store the invoice PDF in Vercel Blob. Verify that the linked Blob store is public and writable."
+          `Unable to store the ${documentLabel} PDF in Vercel Blob. Verify that the linked Blob store is public and writable.`
         );
       }
     }
@@ -857,17 +895,20 @@ export async function storeGarageRequestInvoicePdf(
     );
   }
 
-  await fs.mkdir(GENERATED_GARAGE_INVOICES_DIR, { recursive: true });
-  const filePath = path.join(GENERATED_GARAGE_INVOICES_DIR, renderedInvoice.fileName);
-  await fs.writeFile(filePath, renderedInvoice.buffer);
+  const outputDirectory = isQuote
+    ? GENERATED_GARAGE_QUOTES_DIR
+    : GENERATED_GARAGE_INVOICES_DIR;
+  await fs.mkdir(outputDirectory, { recursive: true });
+  const filePath = path.join(outputDirectory, renderedDocument.fileName);
+  await fs.writeFile(filePath, renderedDocument.buffer);
 
   return {
     storage: "local" as const,
-    fileName: renderedInvoice.fileName,
+    fileName: renderedDocument.fileName,
     filePath,
-    invoiceNumber: renderedInvoice.invoiceNumber,
-    publicPath: renderedInvoice.publicPath,
-    absoluteUrl: `${resolveSlAutomotivePublicBaseUrl(requestOriginFallback)}${renderedInvoice.publicPath}`,
+    documentNumber: renderedDocument.documentNumber,
+    publicPath: renderedDocument.publicPath,
+    absoluteUrl: `${resolveSlAutomotivePublicBaseUrl(requestOriginFallback)}${renderedDocument.publicPath}`,
   };
 }
 
@@ -883,12 +924,31 @@ export async function generateGarageRequestInvoicePdf(
     invoiceNumber
   );
 
-  const storedInvoice = await storeGarageRequestInvoicePdf(
+  const storedInvoice = await storeGarageRequestPdf(
     requestOriginFallback,
     renderedInvoice
   );
 
   return {
     ...storedInvoice,
+    invoiceNumber: storedInvoice.documentNumber,
+  };
+}
+
+export async function generateGarageRequestQuotePdf(
+  requestOriginFallback: string | null,
+  request: GarageInvoiceRequestData,
+  lines: GarageInvoiceLine[],
+  quoteNumber: string
+) {
+  const renderedQuote = await renderGarageRequestQuotePdfBuffer(
+    request,
+    lines,
+    quoteNumber
+  );
+  const storedQuote = await storeGarageRequestPdf(requestOriginFallback, renderedQuote);
+  return {
+    ...storedQuote,
+    quoteNumber: storedQuote.documentNumber,
   };
 }

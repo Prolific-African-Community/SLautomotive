@@ -31,6 +31,10 @@ type GarageRequest = {
   priority: string;
   quoteTotal?: number | null;
   quoteNote?: string | null;
+  quoteNumber?: string | null;
+  quoteCurrency?: string | null;
+  quotePdfUrl?: string | null;
+  quotePdfGeneratedAt?: string | null;
   mechanicNotes?: string | null;
   invoiceNumber?: string | null;
   invoiceTotal?: number | null;
@@ -283,6 +287,7 @@ export default function GarageRequestDetail() {
   const [saving, setSaving] = useState(false);
   const [lineBusyId, setLineBusyId] = useState<string | null>(null);
   const [invoiceBusy, setInvoiceBusy] = useState(false);
+  const [quoteBusy, setQuoteBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -596,6 +601,41 @@ export default function GarageRequestDetail() {
     }
   }
 
+  async function generateQuote() {
+    if (!request) return;
+    if (request.interventions.length === 0) {
+      setError("Ajoutez au moins une ligne d’intervention avant de générer le devis.");
+      return;
+    }
+
+    try {
+      setQuoteBusy(true);
+      setError(null);
+      setMessage(null);
+      const json = await fetchJson<{
+        request: GarageRequest;
+        quoteNumber: string;
+        quotePdfUrl: string;
+        quotePdfGeneratedAt: string;
+        quoteTotal: number;
+        quoteCurrency?: string | null;
+      }>(`/api/garage/requests/${id}/quote`, { method: "POST" });
+      const quote = json.data;
+      if (quote?.request) {
+        setRequest(quote.request);
+        hydrateForm(quote.request);
+      }
+      setMessage(quote?.quoteNumber ? `Devis ${quote.quoteNumber} généré.` : "Devis généré.");
+      if (quote?.quotePdfUrl) {
+        window.open(quote.quotePdfUrl, "_blank", "noopener,noreferrer");
+      }
+    } catch (err: any) {
+      setError(err?.message || "Génération du devis impossible.");
+    } finally {
+      setQuoteBusy(false);
+    }
+  }
+
   useEffect(() => {
     if (!id) return;
 
@@ -705,6 +745,22 @@ export default function GarageRequestDetail() {
             </button>
             <button
               className={buttonClass}
+              onClick={generateQuote}
+              disabled={quoteBusy || request.interventions.length === 0}
+            >
+              {quoteBusy
+                ? "Génération devis…"
+                : request.quotePdfUrl
+                ? "Régénérer devis PDF"
+                : "Générer devis PDF"}
+            </button>
+            {request.quotePdfUrl ? (
+              <a className={ghostButtonClass} href={request.quotePdfUrl} target="_blank" rel="noopener noreferrer">
+                Ouvrir devis
+              </a>
+            ) : null}
+            <button
+              className={buttonClass}
               onClick={sendQuoteWhatsapp}
               disabled={!canSendQuoteWhatsapp || saving}
               title={quoteWhatsappTitle}
@@ -741,6 +797,12 @@ export default function GarageRequestDetail() {
               Rafraîchir
             </button>
           </div>
+          {request.quoteNumber || request.quotePdfUrl ? (
+            <p className="mt-3 text-xs text-zinc-500">
+              Devis {request.quoteNumber || "généré"}
+              {request.quotePdfGeneratedAt ? ` · ${formatDate(request.quotePdfGeneratedAt)}` : ""}
+            </p>
+          ) : null}
           {request.invoiceNumber || request.invoicePdfUrl ? (
             <p className="mt-3 text-xs text-zinc-500">
               Facture {request.invoiceNumber || "générée"}

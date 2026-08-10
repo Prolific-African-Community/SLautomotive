@@ -126,8 +126,12 @@ model GarageRequest {
   priority GarageRequestPriority @default(NORMAL)
   source   String?               @default("website")
 
-  quoteTotal Float?
-  quoteNote  String?
+  quoteTotal          Float?
+  quoteNote           String?
+  quoteNumber         String?
+  quoteCurrency       String?   @default("EUR")
+  quotePdfUrl         String?
+  quotePdfGeneratedAt DateTime?
 
   mechanicNotes String?
   archivedAt    DateTime?

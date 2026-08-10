@@ -35,6 +35,10 @@ type GarageRequest = {
   status: string;
   priority: string;
   quoteTotal?: number | null;
+  quoteNumber?: string | null;
+  quoteCurrency?: string | null;
+  quotePdfUrl?: string | null;
+  quotePdfGeneratedAt?: string | null;
   archivedAt?: string | null;
   invoiceNumber?: string | null;
   invoiceTotal?: number | null;
@@ -306,6 +310,7 @@ export default function GarageDashboard() {
   const [quoteDrafts, setQuoteDrafts] = useState<Record<string, QuoteDraft>>({});
   const [selectedGarageRequestId, setSelectedGarageRequestId] = useState<string | null>(null);
   const [invoiceGeneratingId, setInvoiceGeneratingId] = useState<string | null>(null);
+  const [quoteGeneratingId, setQuoteGeneratingId] = useState<string | null>(null);
   const [selectedExternalRequestId, setSelectedExternalRequestId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showCodeForm, setShowCodeForm] = useState(false);
@@ -607,6 +612,35 @@ export default function GarageDashboard() {
       setError(err?.message || "Génération de la facture impossible.");
     } finally {
       setInvoiceGeneratingId(null);
+    }
+  }
+
+  async function generateGarageQuote(request: GarageRequest) {
+    const lineCount = request.summary?.interventionCount ?? request.interventions.length;
+    if (lineCount === 0) {
+      setError("Ajoutez au moins une ligne d’intervention avant de générer le devis.");
+      return;
+    }
+    try {
+      setQuoteGeneratingId(request.id);
+      setError(null);
+      setMessage(null);
+      const json = await fetchJson<{
+        quoteNumber: string;
+        quotePdfUrl: string;
+        quotePdfGeneratedAt: string;
+        quoteTotal: number;
+      }>(`/api/garage/requests/${request.id}/quote`, { method: "POST" });
+      const quote = json.data;
+      setMessage(quote?.quoteNumber ? `Devis ${quote.quoteNumber} généré.` : "Devis généré.");
+      await loadRequests();
+      if (typeof window !== "undefined" && quote?.quotePdfUrl) {
+        window.open(quote.quotePdfUrl, "_blank", "noopener,noreferrer");
+      }
+    } catch (err: any) {
+      setError(err?.message || "Génération du devis impossible.");
+    } finally {
+      setQuoteGeneratingId(null);
     }
   }
 
@@ -1387,6 +1421,46 @@ export default function GarageDashboard() {
                       <p className="mt-3 text-sm text-zinc-400">Aucune ligne d&apos;intervention pour l&apos;instant.</p>
                     )}
                   </div>
+
+                  {(() => {
+                    const quoteBusy = quoteGeneratingId === selectedGarageRequest.id;
+                    const hasQuote = Boolean(selectedGarageRequest.quotePdfUrl);
+                    const canGenerate = lineCount > 0;
+
+                    return (
+                      <div className="mt-4 rounded-2xl border border-yellow-300/20 bg-yellow-300/[0.04] p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="text-xs font-bold uppercase tracking-[0.14em] text-yellow-200/80">
+                              Devis PDF
+                            </p>
+                            <p className="mt-2 text-sm text-zinc-300">
+                              {hasQuote
+                                ? `${selectedGarageRequest.quoteNumber || "Devis généré"}${selectedGarageRequest.quotePdfGeneratedAt ? ` · ${formatDate(selectedGarageRequest.quotePdfGeneratedAt)}` : ""}`
+                                : canGenerate
+                                ? "Générez le devis à partir des lignes d’intervention."
+                                : "Ajoutez au moins une ligne d’intervention avant de générer le devis."}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {hasQuote ? (
+                              <a className={buttonClass} href={selectedGarageRequest.quotePdfUrl || "#"} target="_blank" rel="noopener noreferrer">
+                                Ouvrir devis
+                              </a>
+                            ) : null}
+                            <button
+                              type="button"
+                              className={hasQuote ? ghostButtonClass : buttonClass}
+                              onClick={() => void generateGarageQuote(selectedGarageRequest)}
+                              disabled={quoteBusy || !canGenerate}
+                            >
+                              {quoteBusy ? "Génération devis…" : hasQuote ? "Régénérer devis PDF" : "Générer devis PDF"}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {(() => {
                     const invoiceBusy = invoiceGeneratingId === selectedGarageRequest.id;
